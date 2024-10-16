@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  emailVerifyController,
   getMeController,
   getProfileController,
   loginController,
@@ -8,6 +9,7 @@ import {
 } from '~/controllers/users.controllers';
 import {
   accessTokenValidator,
+  emailVerifyTokenValidator,
   loginValidator,
   refreshTokenValidator,
   registerValidator
@@ -42,6 +44,14 @@ usersRouter.post('/logout', accessTokenValidator, refreshTokenValidator, logoutC
  * Body: { name: string, email: string, password: string, date_of_birth: ISO8601 }
  */
 usersRouter.post('/register', registerValidator, wrapRequestHandler(registerController));
+
+/**
+ * Description: Verify email
+ * Path: /verify-email
+ * Method: GET
+ * Body: { email_verify_token: string }
+ */
+usersRouter.get('/verify-email', emailVerifyTokenValidator, emailVerifyController);
 
 /**
  * Description: Get my profile

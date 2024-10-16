@@ -4,7 +4,7 @@ import { ObjectId } from 'mongodb';
 import HTTP_STATUS from '~/constants/httpStatus';
 import USERS_MESSAGES from '~/constants/messages';
 import { ErrorWithStatus } from '~/models/Errors';
-import { RegisterRequestBody, TokenPayload } from '~/models/requests/User.requests';
+import { EmailVerifyRequestBody, RegisterRequestBody, TokenPayload } from '~/models/requests/User.requests';
 import databaseService from '~/services/database.services';
 import usersService from '~/services/users.services';
 
@@ -35,6 +35,35 @@ export const logoutController = async (req: Request, res: Response, next: NextFu
   await usersService.logout(refresh_token as string);
   return res.json({
     message: 'Logout successfully'
+  });
+};
+
+export const emailVerifyController = async (
+  req: Request<ParamsDictionary, any, EmailVerifyRequestBody>,
+  res: Response,
+  next: NextFunction
+) => {
+  const { user_id } = req.decoded_email_verify_token as TokenPayload;
+  const user = await databaseService.users.findOne({
+    _id: new ObjectId(user_id)
+  });
+  if (!user) {
+    next(
+      new ErrorWithStatus({
+        message: USERS_MESSAGES.USER_NOT_FOUND,
+        status: HTTP_STATUS.NOT_FOUND
+      })
+    );
+  }
+  if (user?.email_verify_token === '') {
+    return res.json({
+      message: USERS_MESSAGES.EMAIL_ALREADY_VERIFIED_BEFORE
+    });
+  }
+  const result = await usersService.verifyEmail(user_id);
+  return res.status(HTTP_STATUS.OK).json({
+    message: USERS_MESSAGES.EMAIL_VERIFIED_SUCCESSFULLY,
+    result
   });
 };
 

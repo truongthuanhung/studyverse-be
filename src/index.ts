@@ -1,8 +1,7 @@
-import express, { NextFunction, Request, Response } from 'express';
+import express from 'express';
 import usersRouter from './routes/users.routes';
 import databaseService from './services/database.services';
-import { ErrorWithStatus } from './models/Errors';
-import HTTP_STATUS from './constants/httpStatus';
+import cors from 'cors';
 import { defaultErrorHandler } from './middlewares/errors.middlewares';
 
 const port = 3000;
@@ -10,6 +9,7 @@ const app = express();
 
 databaseService.connect().catch(console.dir);
 
+app.use(cors());
 app.use(express.json());
 
 app.get('/', (req, res) => {

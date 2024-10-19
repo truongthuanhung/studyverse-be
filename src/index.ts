@@ -4,7 +4,7 @@ import databaseService from './services/database.services';
 import cors from 'cors';
 import { defaultErrorHandler } from './middlewares/errors.middlewares';
 
-const port = 3000;
+const port = 3003;
 const app = express();
 
 databaseService.connect().catch(console.dir);

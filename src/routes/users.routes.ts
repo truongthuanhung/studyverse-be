@@ -1,18 +1,25 @@
 import { Router } from 'express';
 import {
   emailVerifyController,
+  forgotPasswordController,
   getMeController,
   getProfileController,
   loginController,
   logoutController,
-  registerController
+  refreshTokenController,
+  registerController,
+  resetPasswordController,
+  verifyForgotPasswordController
 } from '~/controllers/users.controllers';
 import {
   accessTokenValidator,
   emailVerifyTokenValidator,
+  forgotPasswordValidator,
   loginValidator,
   refreshTokenValidator,
-  registerValidator
+  registerValidator,
+  resetPasswordValidator,
+  verifyForgotPasswordValidator
 } from '~/middlewares/users.middlewares';
 import { wrapRequestHandler } from '~/utils/handlers';
 
@@ -35,7 +42,7 @@ usersRouter.post('/login', loginValidator, wrapRequestHandler(loginController));
  * Body: { refresh_token: string }
  */
 
-usersRouter.post('/logout', accessTokenValidator, refreshTokenValidator, logoutController);
+usersRouter.post('/logout', accessTokenValidator, refreshTokenValidator, wrapRequestHandler(logoutController));
 
 /**
  * Description: Register a new user
@@ -48,10 +55,41 @@ usersRouter.post('/register', registerValidator, wrapRequestHandler(registerCont
 /**
  * Description: Verify email
  * Path: /verify-email
- * Method: GET
+ * Method: POST
  * Body: { email_verify_token: string }
  */
-usersRouter.get('/verify-email', emailVerifyTokenValidator, emailVerifyController);
+usersRouter.post('/verify-email', emailVerifyTokenValidator, wrapRequestHandler(emailVerifyController));
+
+/**
+ * Description: Forgot password
+ * Path: /forgot-password
+ * Method: POST
+ * Body: { email: string }
+ */
+usersRouter.post('/forgot-password', forgotPasswordValidator, wrapRequestHandler(forgotPasswordController));
+
+/**
+ * Description: Verify forgot password token
+ * Path: /verify-forgot-password
+ * Method: POST
+ * Body: { forgot_password_token: string }
+ */
+usersRouter.post(
+  '/verify-forgot-password',
+  verifyForgotPasswordValidator,
+  wrapRequestHandler(verifyForgotPasswordController)
+);
+
+/**
+ * Description: Reset password
+ * Path: /reset-password
+ * Method: POST
+ * Body: { forgot_password_token: string, password: string, confirm_password: string }
+ */
+usersRouter.post('/reset-password', resetPasswordValidator, wrapRequestHandler(resetPasswordController));
+
+usersRouter.post('/refresh-token', refreshTokenValidator, wrapRequestHandler(refreshTokenController));
+
 
 /**
  * Description: Get my profile

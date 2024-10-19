@@ -66,7 +66,9 @@ const USERS_MESSAGES = {
   ROLE_IS_REQUIRED: 'Role is required',
   INVALID_ROLE: 'Role is invalid',
   GENDER_IS_REQUIRED: 'Gender is required',
-  INVALID_GENDER: 'Gender is invalid'
+  INVALID_GENDER: 'Gender is invalid',
+  USER_UNVERIFIED: 'User is unverified',
+  USER_BANNED: 'User is banned'
 } as const;
 
 export default USERS_MESSAGES;

@@ -8,7 +8,8 @@ import { TokenType, UserVerifyStatus } from '~/constants/enums';
 import RefreshToken from '~/models/schemas/RefreshToken.schema';
 import { ObjectId } from 'mongodb';
 import nodemailer from 'nodemailer';
-import { generateEmailHTML } from '~/utils/mail';
+import { generateEmailHTML, generateForgotPasswordEmail } from '~/utils/mail';
+import USERS_MESSAGES from '~/constants/messages';
 config();
 
 class UsersService {
@@ -47,6 +48,19 @@ class UsersService {
       privateKey: process.env.JWT_SECRET_EMAIL_VERIFY_TOKEN as string,
       options: {
         expiresIn: process.env.EMAIL_VERIFY_TOKEN_EXPIRES_IN
+      }
+    });
+  }
+
+  async signForgotPasswordToken(user_id: string) {
+    return signToken({
+      payload: {
+        user_id,
+        token_type: TokenType.ForgotPasswordToken
+      },
+      privateKey: process.env.JWT_SECRET_FORGOT_PASSWORD_TOKEN as string,
+      options: {
+        expiresIn: process.env.FORGOT_PASSWORD_TOKEN_EXPIRES_IN
       }
     });
   }
@@ -92,17 +106,18 @@ class UsersService {
         email_verify_token
       })
     );
+    return {
+      email_verify_token
+    };
+  }
+
+  async login(user_id: string) {
     const [access_token, refresh_token] = await Promise.all([
-      this.signAccessToken(user_id.toString()),
-      this.signRefreshToken(user_id.toString())
+      this.signAccessToken(user_id),
+      this.signRefreshToken(user_id)
     ]);
-    await databaseService.refresh_token.insertOne(new RefreshToken({ user_id: user_id, token: refresh_token }));
-    await this.sendEmail(
-      {
-        header: 'Verify email',
-        content: generateEmailHTML(email_verify_token)
-      },
-      payload.email
+    await databaseService.refresh_token.insertOne(
+      new RefreshToken({ user_id: new ObjectId(user_id), token: refresh_token })
     );
     return {
       access_token,
@@ -110,27 +125,24 @@ class UsersService {
     };
   }
 
-  async login(email: string, password: string) {
-    const user = await databaseService.users.findOne({
-      email,
-      password: hashPassword(password)
-    });
-    if (user) {
-      const [access_token, refresh_token] = await Promise.all([
-        this.signAccessToken(user._id.toString()),
-        this.signRefreshToken(user._id.toString())
-      ]);
-      await databaseService.refresh_token.insertOne(new RefreshToken({ user_id: user._id, token: refresh_token }));
-      return {
-        access_token,
-        refresh_token
-      };
-    }
-    return null;
-  }
-
   async logout(refresh_token: string) {
     await databaseService.refresh_token.deleteOne({ token: refresh_token });
+  }
+  async getNewRefreshToken(user_id: string, token: string) {
+    const [access_token, refresh_token, _] = await Promise.all([
+      this.signAccessToken(user_id),
+      this.signRefreshToken(user_id),
+      databaseService.refresh_token.deleteOne({
+        token
+      })
+    ]);
+    await databaseService.refresh_token.insertOne(
+      new RefreshToken({ user_id: new ObjectId(user_id), token: refresh_token })
+    );
+    return {
+      access_token,
+      refresh_token
+    };
   }
 
   async verifyEmail(user_id: string) {
@@ -158,6 +170,50 @@ class UsersService {
     return {
       access_token,
       refresh_token
+    };
+  }
+
+  async forgotPassword(user_id: string, email: string) {
+    const forgot_password_token = await this.signForgotPasswordToken(user_id);
+    await databaseService.users.updateOne(
+      {
+        _id: new ObjectId(user_id)
+      },
+      {
+        $set: {
+          forgot_password_token
+        },
+        $currentDate: {
+          updated_at: true
+        }
+      }
+    );
+    await this.sendEmail(
+      {
+        header: 'Forgot password',
+        content: generateForgotPasswordEmail(forgot_password_token)
+      },
+      email
+    );
+  }
+
+  async resetPassword({ user_id, password }: { user_id: string; password: string }) {
+    await databaseService.users.updateOne(
+      {
+        _id: new ObjectId(user_id)
+      },
+      {
+        $set: {
+          password: hashPassword(password),
+          forgot_password_token: ''
+        },
+        $currentDate: {
+          updated_at: true
+        }
+      }
+    );
+    return {
+      message: USERS_MESSAGES.RESET_PASSWORD_SUCCESSFULLY
     };
   }
 

@@ -27,6 +27,14 @@ export const loginController = async (req: Request, res: Response, next: NextFun
   });
 };
 
+export const oauthController = async (req: Request, res: Response, next: NextFunction) => {
+  const { code } = req.query;
+  const result = await usersService.oauth(code as string);
+  return res.redirect(
+    `http://localhost:3000/oauth?access_token=${result.access_token}&refresh_token=${result.refresh_token}&new_user=${result.new_user}`
+  );
+};
+
 export const registerController = async (req: Request<ParamsDictionary, any, RegisterRequestBody>, res: Response) => {
   const result = await usersService.register(req.body);
   res.json({

@@ -4,12 +4,15 @@ import { LoginRequestBody, RegisterRequestBody } from '~/models/requests/User.re
 import { hashPassword } from '~/utils/crypto';
 import { signToken } from '~/utils/jwt';
 import { config } from 'dotenv';
-import { TokenType, UserVerifyStatus } from '~/constants/enums';
+import { Gender, TokenType, UserRole, UserVerifyStatus } from '~/constants/enums';
 import RefreshToken from '~/models/schemas/RefreshToken.schema';
 import { ObjectId } from 'mongodb';
 import nodemailer from 'nodemailer';
 import { generateEmailHTML, generateForgotPasswordEmail } from '~/utils/mail';
 import USERS_MESSAGES from '~/constants/messages';
+import { ErrorWithStatus } from '~/models/Errors';
+import HTTP_STATUS from '~/constants/httpStatus';
+import axios from 'axios';
 config();
 
 class UsersService {
@@ -123,6 +126,105 @@ class UsersService {
       access_token,
       refresh_token
     };
+  }
+
+  private async getOauthGoogleToken(code: string) {
+    const body = {
+      code,
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      redirect_uri: process.env.GOOGLE_REDIRECT_URI,
+      grant_type: 'authorization_code'
+    };
+    const { data } = await axios.post('https://oauth2.googleapis.com/token', body, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
+    return data;
+  }
+  private async getGoogleUserInfo(access_token: string, id_token: string) {
+    const { data } = await axios.get('https://www.googleapis.com/oauth2/v1/userinfo', {
+      params: {
+        access_token,
+        alt: 'json'
+      },
+      headers: {
+        Authorization: `Bearer ${id_token}`
+      }
+    });
+    return data as {
+      id: string;
+      email: string;
+      verified_email: boolean;
+      name: string;
+    };
+  }
+
+  async oauth(code: string) {
+    const { id_token, access_token } = await this.getOauthGoogleToken(code);
+    const result = await this.getGoogleUserInfo(access_token, id_token);
+    if (!result.verified_email) {
+      throw new ErrorWithStatus({
+        status: 400,
+        message: USERS_MESSAGES.GMAIL_NOT_VERIFIED
+      });
+    }
+    const user = await databaseService.users.findOne({
+      email: result.email
+    });
+    if (user) {
+      const user_id = user._id.toString();
+      const [access_token, refresh_token] = await Promise.all([
+        this.signAccessToken(user_id),
+        this.signRefreshToken(user_id),
+        databaseService.users.updateOne(
+          {
+            _id: new ObjectId(user_id)
+          },
+          {
+            $set: {
+              verify: UserVerifyStatus.Verified
+            },
+            $currentDate: {
+              updated_at: true
+            }
+          }
+        )
+      ]);
+      await databaseService.refresh_token.insertOne(
+        new RefreshToken({ user_id: new ObjectId(user_id), token: refresh_token })
+      );
+      return {
+        access_token,
+        refresh_token,
+        new_user: 0
+      };
+    } else {
+      const password = Math.random().toString(36).substring(2, 15);
+      const user_id = new ObjectId();
+      await databaseService.users.insertOne(
+        new User({
+          _id: user_id,
+          email: result.email,
+          name: result.name,
+          date_of_birth: new Date(),
+          password: hashPassword(password),
+          role: UserRole.Student,
+          gender: Gender.Other
+        })
+      );
+      const [access_token, refresh_token] = await Promise.all([
+        this.signAccessToken(user_id.toString()),
+        this.signRefreshToken(user_id.toString())
+      ]);
+
+      return {
+        access_token,
+        refresh_token,
+        new_user: 1
+      };
+    }
   }
 
   async logout(refresh_token: string) {

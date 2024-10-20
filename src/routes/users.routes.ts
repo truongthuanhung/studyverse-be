@@ -6,6 +6,7 @@ import {
   getProfileController,
   loginController,
   logoutController,
+  oauthController,
   refreshTokenController,
   registerController,
   resetPasswordController,
@@ -33,6 +34,14 @@ const usersRouter = Router();
  */
 
 usersRouter.post('/login', loginValidator, wrapRequestHandler(loginController));
+
+/**
+ * Description: Login a user with oauth
+ * Path: /oauth/google
+ * Method: GET
+ * Query: { code: string }
+ */
+usersRouter.get('/oauth/google', wrapRequestHandler(oauthController));
 
 /**
  * Description: Logout a user

@@ -201,6 +201,12 @@ export const accessTokenValidator = validate(
               });
               (req as Request).decoded_authorization = decoded_authorization;
             } catch (error) {
+              if ((error as JsonWebTokenError).message === 'jwt expired') {
+                throw new ErrorWithStatus({
+                  message: 'jwt access_token expired',
+                  status: HTTP_STATUS.UNAUTHORIZED
+                });
+              }
               throw new ErrorWithStatus({
                 message: (error as JsonWebTokenError).message,
                 status: HTTP_STATUS.UNAUTHORIZED
@@ -235,6 +241,12 @@ export const refreshTokenValidator = validate(
               });
               (req as Request).decoded_refresh_token = decoded_refresh_token;
             } catch (error) {
+              if ((error as JsonWebTokenError).message === 'jwt expired') {
+                throw new ErrorWithStatus({
+                  message: 'jwt refresh_token expired',
+                  status: HTTP_STATUS.UNAUTHORIZED
+                });
+              }
               throw new ErrorWithStatus({
                 message: (error as JsonWebTokenError).message,
                 status: HTTP_STATUS.UNAUTHORIZED
@@ -277,6 +289,12 @@ export const emailVerifyTokenValidator = validate(
               (req as Request).decoded_email_verify_token = decoded_email_verify_token;
               return true;
             } catch (error) {
+              if ((error as JsonWebTokenError).message === 'jwt expired') {
+                throw new ErrorWithStatus({
+                  message: 'jwt email_verify_token expired',
+                  status: HTTP_STATUS.UNAUTHORIZED
+                });
+              }
               throw new ErrorWithStatus({
                 message: (error as JsonWebTokenError).message,
                 status: HTTP_STATUS.UNAUTHORIZED
@@ -334,6 +352,12 @@ export const verifyForgotPasswordValidator = validate(
               });
               (req as Request).decoded_forgot_password_token = decoded_forgot_password_token;
             } catch (err) {
+              if ((err as JsonWebTokenError).message === 'jwt expired') {
+                throw new ErrorWithStatus({
+                  message: 'jwt forgot_password_token expired',
+                  status: HTTP_STATUS.UNAUTHORIZED
+                });
+              }
               throw new ErrorWithStatus({
                 message: (err as JsonWebTokenError).message,
                 status: HTTP_STATUS.UNAUTHORIZED

@@ -3,18 +3,16 @@ import usersRouter from './routes/users.routes';
 import databaseService from './services/database.services';
 import cors from 'cors';
 import { defaultErrorHandler } from './middlewares/errors.middlewares';
+import { config } from 'dotenv';
+config();
 
-const port = 3003;
+const port = process.env.PORT || 3003;
 const app = express();
 
 databaseService.connect().catch(console.dir);
 
 app.use(cors());
 app.use(express.json());
-
-app.get('/', (req, res) => {
-  res.send('Hello world');
-});
 
 app.use('/users', usersRouter);
 

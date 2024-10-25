@@ -101,6 +101,14 @@ class UsersService {
     return Boolean(user);
   }
 
+  async findUserByIdAndPassword(user_id: string, password: string) {
+    const user = await databaseService.users.findOne({
+      _id: new ObjectId(user_id),
+      password: hashPassword(password)
+    });
+    return Boolean(user);
+  }
+
   async register(payload: RegisterRequestBody) {
     const user_id = new ObjectId();
     const email_verify_token = await this.signEmailVerifyToken(user_id.toString());
@@ -402,6 +410,25 @@ class UsersService {
     }
     return {
       message: USERS_MESSAGES.ALREADY_UNFOLLOWED
+    };
+  }
+
+  async changePassword(user_id: string, password: string) {
+    await databaseService.users.updateOne(
+      {
+        _id: new ObjectId(user_id)
+      },
+      {
+        $set: {
+          password: hashPassword(password)
+        },
+        $currentDate: {
+          updated_at: true
+        }
+      }
+    );
+    return {
+      message: USERS_MESSAGES.CHANGE_PASSWORD_SUCCESSFULLY
     };
   }
 }

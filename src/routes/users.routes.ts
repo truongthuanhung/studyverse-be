@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  changePasswordController,
   emailVerifyController,
   followController,
   forgotPasswordController,
@@ -18,6 +19,7 @@ import {
 import { filterMiddleware } from '~/middlewares/common.middlewares';
 import {
   accessTokenValidator,
+  changePasswordValidator,
   emailVerifyTokenValidator,
   followValidator,
   forgotPasswordValidator,
@@ -160,5 +162,19 @@ usersRouter.post(
  * Body: { followed_user_id: string }
  */
 usersRouter.post('/unfollow', accessTokenValidator, unfollowValidator, wrapRequestHandler(unfollowController));
+
+/**
+ * Description: Change password
+ * Path: /change-password
+ * Method: PUT
+ * Header: { Authorization: Bearer <access_token> }
+ * Body: { old_password: string, password: string, confirm_password: string }
+ */
+usersRouter.put(
+  '/change-password',
+  accessTokenValidator,
+  changePasswordValidator,
+  wrapRequestHandler(changePasswordController)
+);
 
 export default usersRouter;

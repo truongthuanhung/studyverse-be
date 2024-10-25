@@ -44,7 +44,7 @@ export interface ResetPasswordRequestBody {
   confirm_password: string;
 }
 
-export interface updateMeRequestBody {
+export interface UpdateMeRequestBody {
   name?: string;
   date_of_birth?: string;
   bio?: string;

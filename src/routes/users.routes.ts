@@ -10,8 +10,10 @@ import {
   refreshTokenController,
   registerController,
   resetPasswordController,
+  updateMeController,
   verifyForgotPasswordController
 } from '~/controllers/users.controllers';
+import { filterMiddleware } from '~/middlewares/common.middlewares';
 import {
   accessTokenValidator,
   emailVerifyTokenValidator,
@@ -20,6 +22,7 @@ import {
   refreshTokenValidator,
   registerValidator,
   resetPasswordValidator,
+  updateMeValidator,
   verifyForgotPasswordValidator
 } from '~/middlewares/users.middlewares';
 import { wrapRequestHandler } from '~/utils/handlers';
@@ -99,7 +102,6 @@ usersRouter.post('/reset-password', resetPasswordValidator, wrapRequestHandler(r
 
 usersRouter.post('/refresh-token', refreshTokenValidator, wrapRequestHandler(refreshTokenController));
 
-
 /**
  * Description: Get my profile
  * Path: /me
@@ -108,6 +110,21 @@ usersRouter.post('/refresh-token', refreshTokenValidator, wrapRequestHandler(ref
  * Body: {}
  */
 usersRouter.get('/me', accessTokenValidator, wrapRequestHandler(getMeController));
+
+/**
+ * Description: Update my profile
+ * Path: /me
+ * Method: PATCH
+ * Header: { Authorization: Bearer <access_token> }
+ * Body: { name: string, date_of_birth: string, bio: string, location: string, website: string, username: string, avatar: string, cover_photo: string}
+ */
+usersRouter.patch(
+  '/me',
+  accessTokenValidator,
+  updateMeValidator,
+  filterMiddleware(['name', 'date_of_birth', 'bio', 'location', 'website', 'username', 'avatar', 'cover_photo']),
+  wrapRequestHandler(updateMeController)
+);
 
 /**
  * Description: Get user profile

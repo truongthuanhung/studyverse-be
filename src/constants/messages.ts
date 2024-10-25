@@ -68,7 +68,9 @@ const USERS_MESSAGES = {
   GENDER_IS_REQUIRED: 'Gender is required',
   INVALID_GENDER: 'Gender is invalid',
   USER_UNVERIFIED: 'User is unverified',
-  USER_BANNED: 'User is banned'
+  USER_BANNED: 'User is banned',
+  CANNOT_FOLLOW_SELF: 'Cannot follow yourself',
+  CANNOT_UNFOLLOW_SELF: 'Cannot unfollow yourself'
 } as const;
 
 export default USERS_MESSAGES;

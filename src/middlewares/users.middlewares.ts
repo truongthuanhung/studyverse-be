@@ -89,7 +89,10 @@ export const registerValidator = validate(
           options: async (value) => {
             const user = await usersService.checkEmailExist(value);
             if (user) {
-              throw new ErrorWithStatus({ message: USERS_MESSAGES.EMAIL_ALREADY_EXISTS, status: 400 });
+              throw new ErrorWithStatus({
+                message: USERS_MESSAGES.EMAIL_ALREADY_EXISTS,
+                status: HTTP_STATUS.BAD_REQUEST
+              });
             }
             return true;
           }
@@ -551,6 +554,17 @@ export const updateMeValidator = validate(
           max: 50
         },
         errorMessage: USERS_MESSAGES.USERNAME_LENGTH
+      },
+      custom: {
+        options: async (value: string, { req }) => {
+          const isUsernameExisted = await usersService.checkUsernameExist(value);
+          if (isUsernameExisted) {
+            throw new ErrorWithStatus({
+              message: USERS_MESSAGES.USERNAME_EXISTED,
+              status: HTTP_STATUS.BAD_REQUEST
+            });
+          }
+        }
       }
     },
     avatar: {
@@ -579,6 +593,62 @@ export const updateMeValidator = validate(
           max: 200
         },
         errorMessage: USERS_MESSAGES.IMG_URL_LENGTH
+      }
+    }
+  })
+);
+
+export const followValidator = validate(
+  checkSchema({
+    followed_user_id: {
+      isMongoId: {
+        errorMessage: USERS_MESSAGES.INVALID_FOLLOWED_USER_ID
+      },
+      custom: {
+        options: async (value: string, { req }) => {
+          const { user_id } = (req as Request).decoded_authorization as TokenPayload;
+          if (user_id === value) {
+            throw new ErrorWithStatus({
+              message: USERS_MESSAGES.CANNOT_FOLLOW_SELF,
+              status: HTTP_STATUS.BAD_REQUEST
+            });
+          }
+          const followed_user = await databaseService.users.findOne({ _id: new ObjectId(value) });
+          if (!followed_user) {
+            throw new ErrorWithStatus({
+              message: USERS_MESSAGES.USER_NOT_FOUND,
+              status: HTTP_STATUS.NOT_FOUND
+            });
+          }
+        }
+      }
+    }
+  })
+);
+
+export const unfollowValidator = validate(
+  checkSchema({
+    unfollowed_user_id: {
+      isMongoId: {
+        errorMessage: USERS_MESSAGES.INVALID_FOLLOWED_USER_ID
+      },
+      custom: {
+        options: async (value: string, { req }) => {
+          const { user_id } = (req as Request).decoded_authorization as TokenPayload;
+          if (user_id === value) {
+            throw new ErrorWithStatus({
+              message: USERS_MESSAGES.CANNOT_FOLLOW_SELF,
+              status: HTTP_STATUS.BAD_REQUEST
+            });
+          }
+          const followed_user = await databaseService.users.findOne({ _id: new ObjectId(value) });
+          if (!followed_user) {
+            throw new ErrorWithStatus({
+              message: USERS_MESSAGES.USER_NOT_FOUND,
+              status: HTTP_STATUS.NOT_FOUND
+            });
+          }
+        }
       }
     }
   })

@@ -2,6 +2,7 @@ import { MongoClient, Db, Collection } from 'mongodb';
 import User from '~/models/schemas/User.schema';
 import { config } from 'dotenv';
 import RefreshToken from '~/models/schemas/RefreshToken.schema';
+import { Follower } from '~/models/schemas/Follower.schema';
 
 config();
 const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@studyverse.otnmy.mongodb.net/?retryWrites=true&w=majority&appName=StudyVerse`;
@@ -27,6 +28,9 @@ class DatabaseService {
   }
   get refresh_token(): Collection<RefreshToken> {
     return this.db.collection('refresh_tokens');
+  }
+  get followers(): Collection<Follower> {
+    return this.db.collection('followers');
   }
 }
 

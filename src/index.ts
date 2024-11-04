@@ -7,10 +7,14 @@ import { config } from 'dotenv';
 import mediasRouter from './routes/medias.routes';
 import { initFolder } from './utils/file';
 import { UPLOAD_DIRIRECTORY, UPLOAD_TEMP_DIRECTORY } from './constants/directories';
+import conversationsRouter from './routes/conversations.routes';
+import { createServer } from 'http';
+import initSocket from './configs/socket';
 config();
 
 const port = process.env.PORT || 3003;
 const app = express();
+const httpServer = createServer(app);
 
 initFolder(UPLOAD_DIRIRECTORY);
 initFolder(UPLOAD_TEMP_DIRECTORY);
@@ -22,10 +26,13 @@ app.use(express.json());
 
 app.use('/users', usersRouter);
 app.use('/medias', mediasRouter);
+app.use('/conversations', conversationsRouter);
 
 //ERROR HANDLER
 app.use(defaultErrorHandler);
 
-app.listen(port, () => {
+initSocket(httpServer);
+
+httpServer.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
 });

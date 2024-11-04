@@ -41,8 +41,13 @@ class MediasService {
         folder: 'uploads',
         resource_type: 'image'
       });
-      fs.unlinkSync(filePath);
-      fs.unlinkSync(processedImagePath);
+      try {
+        fs.unlinkSync(processedImagePath);
+        fs.unlinkSync(filePath);
+      } catch (err) {
+        console.error(err);
+      }
+
       return result;
     });
 

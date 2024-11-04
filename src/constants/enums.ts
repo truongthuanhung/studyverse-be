@@ -21,3 +21,8 @@ export enum TokenType {
   ForgotPasswordToken,
   EmailVerifyToken
 }
+
+export enum ConversationType {
+  Direct,
+  Group
+}

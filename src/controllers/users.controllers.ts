@@ -203,3 +203,12 @@ export const changePasswordController = async (
   const result = await usersService.changePassword(user_id, password);
   return res.json(result);
 };
+
+export const getUsersController = async (req: Request, res: Response) => {
+  const { user_id } = req.decoded_authorization as TokenPayload;
+  const result = await usersService.getUsers(user_id);
+  return res.json({
+    message: 'Get users list successfully',
+    result
+  });
+};

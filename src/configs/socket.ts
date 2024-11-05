@@ -3,6 +3,8 @@ import { Server } from 'socket.io';
 import databaseService from '~/services/database.services';
 import { Server as ServerHttp } from 'http';
 import Message from '~/models/schemas/Message.schema';
+import { ConversationType } from '~/constants/enums';
+import Conversation from '~/models/schemas/Conversation.schema';
 
 const initSocket = (httpServer: ServerHttp) => {
   const io = new Server(httpServer, {
@@ -25,14 +27,11 @@ const initSocket = (httpServer: ServerHttp) => {
     };
     console.log(users);
     socket.on('create_message', async (conversationId, message) => {
-      const data = {
-        message: 'Call the GET message API',
-        target: '2 members of a conversation',
-        reason: '1 member create a new message into that conversationId',
-        text_send: message,
-        conversationId: conversationId
-      };
-
+      if (conversationId === 'new') {
+        return;
+      }
+      const isValid = ObjectId.isValid(conversationId);
+      if (!isValid) return;
       const conversation = await databaseService.conversations.findOne({
         _id: new ObjectId(conversationId as string)
       });
@@ -82,7 +81,8 @@ const initSocket = (httpServer: ServerHttp) => {
     });
 
     socket.on('send_message', async (conversationId, message) => {
-      console.log(conversationId, message, user_id);
+      const isValid = ObjectId.isValid(conversationId);
+      if (!isValid) return;
       const conversation = await databaseService.conversations.findOne({
         _id: new ObjectId(conversationId as string)
       });
@@ -128,14 +128,81 @@ const initSocket = (httpServer: ServerHttp) => {
         )
       ]);
 
+      socket.emit('get_new_message', conversationId);
       const receiver_socket_id = users[otherParticipantId]?.socket_id;
       if (receiver_socket_id) {
         socket.to(receiver_socket_id).emit('get_new_message', conversationId);
-        socket.emit('get_new_message', conversationId);
       }
     });
 
-    socket.on('read_message', async (conversationId) => {
+    socket.on('send_new_message', async (partnerId, message) => {
+      console.log({ user_id, partnerId, message });
+      if (!ObjectId.isValid(partnerId) || !ObjectId.isValid(user_id)) return;
+      let conversationId;
+
+      // First check if conversation exists
+      const existingConversation = await databaseService.conversations.findOne({
+        participants: {
+          $all: [new ObjectId(user_id as string), new ObjectId(partnerId as string)]
+        }
+      });
+
+      if (existingConversation) {
+        // Update existing conversation
+        conversationId = existingConversation._id;
+        await Promise.all([
+          databaseService.conversations.updateOne(
+            { _id: existingConversation._id },
+            {
+              $set: {
+                last_message: {
+                  content: message,
+                  sender_id: new ObjectId(user_id as string)
+                },
+                updated_at: new Date(),
+                [`unread_count.${partnerId}`]: (existingConversation.unread_count[partnerId] || 0) + 1
+              }
+            }
+          ),
+          databaseService.messages.insertOne(
+            new Message({
+              conversation_id: new ObjectId(conversationId),
+              content: message,
+              sender_id: new ObjectId(user_id as string)
+            })
+          )
+        ]);
+      } else {
+        // Create new conversation
+        const newConversation = new Conversation({
+          participants: [new ObjectId(user_id as string), new ObjectId(partnerId as string)],
+          type: ConversationType.Direct,
+          last_message: {
+            content: message,
+            sender_id: new ObjectId(user_id as string)
+          },
+          unread_count: {
+            [partnerId]: 1,
+            [user_id]: 0
+          }
+        });
+
+        const result = await databaseService.conversations.insertOne(newConversation);
+        conversationId = result.insertedId;
+        await databaseService.messages.insertOne(
+          new Message({
+            conversation_id: new ObjectId(conversationId),
+            content: message,
+            sender_id: new ObjectId(user_id as string)
+          })
+        );
+        socket.emit('create_new_conversation', conversationId);
+      }
+    });
+
+    socket.on('read_message', async (conversationId: string) => {
+      const isValid = ObjectId.isValid(conversationId);
+      if (!isValid) return;
       await databaseService.conversations.findOneAndUpdate(
         { _id: new ObjectId(conversationId as string) },
         {

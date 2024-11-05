@@ -6,6 +6,7 @@ import {
   forgotPasswordController,
   getMeController,
   getProfileController,
+  getUsersController,
   loginController,
   logoutController,
   oauthController,
@@ -43,6 +44,16 @@ const usersRouter = Router();
  */
 
 usersRouter.post('/login', loginValidator, wrapRequestHandler(loginController));
+
+/**
+ * Description: Get list user
+ * Path: /login
+ * Method: GET
+ * Header: { Authorization: Bearer <access_token> }
+ * Body: {}
+ */
+
+usersRouter.get('/', accessTokenValidator, wrapRequestHandler(getUsersController));
 
 /**
  * Description: Login a user with oauth

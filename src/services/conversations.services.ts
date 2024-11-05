@@ -2,6 +2,7 @@ import { ObjectId } from 'mongodb';
 import databaseService from './database.services';
 import { ErrorWithStatus } from '~/models/Errors';
 import HTTP_STATUS from '~/constants/httpStatus';
+import { ConversationType } from '~/constants/enums';
 
 class ConversationsService {
   async checkValidUser(user_id: string, conversation_id: string) {
@@ -115,6 +116,38 @@ class ConversationsService {
         isSender: message.sender_id.toString() === user_id
       })),
       partner
+    };
+  }
+
+  async getUnreadMessages(user_id: string) {
+    const user_id_obj = new ObjectId(user_id);
+
+    // Tìm tất cả conversation mà user tham gia
+    const conversations = await databaseService.conversations
+      .find({
+        participants: user_id_obj
+      })
+      .toArray();
+
+    // Tính tổng số tin nhắn chưa đọc
+    const total_unread = conversations.reduce((sum, conversation) => {
+      return sum + (conversation.unread_count[user_id] ? conversation.unread_count[user_id] : 0);
+    }, 0);
+
+    return total_unread;
+  }
+
+  async checkConversationParticipants(user_id: string, partner_id: string) {
+    const conversation = await databaseService.conversations.findOne({
+      participants: {
+        $all: [new ObjectId(user_id), new ObjectId(partner_id)]
+      },
+      type: ConversationType.Direct
+    });
+
+    return {
+      existed: Boolean(conversation),
+      conversation
     };
   }
 }

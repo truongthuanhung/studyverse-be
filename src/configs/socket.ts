@@ -7,7 +7,10 @@ import Message from '~/models/schemas/Message.schema';
 const initSocket = (httpServer: ServerHttp) => {
   const io = new Server(httpServer, {
     cors: {
-      origin: 'http://localhost:3000'
+      origin: true, // Cho phép tất cả origins
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+      credentials: false
     }
   });
 

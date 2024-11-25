@@ -79,7 +79,7 @@ class ConversationsService {
     return result;
   }
 
-  async getConversationDetail(user_id: string, conversation_id: string) {
+  async getConversationDetail(user_id: string, conversation_id: string, limit?: number, page?: number) {
     // Get conversation first to check exists
     const conversation = await databaseService.conversations.findOne(
       { _id: new ObjectId(conversation_id) },
@@ -90,14 +90,20 @@ class ConversationsService {
       throw new Error('Conversation not found');
     }
 
-    const [messages, partner] = await Promise.all([
-      // Get messages
-      databaseService.messages
-        .find({
-          conversation_id: new ObjectId(conversation_id)
-        })
-        .sort({ created_at: 1 })
-        .toArray(),
+    // Build pagination options
+    const skip = limit && page ? (page - 1) * limit : 0;
+    const messageQuery = databaseService.messages.find({
+      conversation_id: new ObjectId(conversation_id)
+    });
+
+    const [messages, totalMessages, partner] = await Promise.all([
+      // Get messages with pagination
+      (limit ? messageQuery.limit(limit).skip(skip) : messageQuery).sort({ created_at: -1 }).toArray(),
+
+      // Get total messages count
+      databaseService.messages.countDocuments({
+        conversation_id: new ObjectId(conversation_id)
+      }),
 
       // Get partner info
       databaseService.users.findOne(
@@ -110,12 +116,22 @@ class ConversationsService {
       )
     ]);
 
+    const paginationInfo = limit
+      ? {
+          total_messages: totalMessages,
+          total_pages: Math.ceil(totalMessages / limit),
+          current_page: page || 1,
+          messages_per_page: limit
+        }
+      : null;
+
     return {
       messages: messages.map((message) => ({
         ...message,
         isSender: message.sender_id.toString() === user_id
       })),
-      partner
+      partner,
+      pagination: paginationInfo
     };
   }
 

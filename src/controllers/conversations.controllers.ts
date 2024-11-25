@@ -15,8 +15,16 @@ export const getConversationsController = async (req: Request, res: Response) =>
 
 export const getConversationMessages = async (req: Request, res: Response) => {
   const { conversationId } = req.params;
+  const { limit, page } = req.query;
   const { user_id } = req.decoded_authorization as TokenPayload;
-  const result = await conversationsService.getConversationDetail(user_id, conversationId);
+
+  const result = await conversationsService.getConversationDetail(
+    user_id,
+    conversationId,
+    Number(limit) || undefined,
+    Number(page) || undefined
+  );
+
   return res.json({
     message: 'Get conversations successfully',
     result

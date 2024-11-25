@@ -5,11 +5,20 @@ import { Server as ServerHttp } from 'http';
 import Message from '~/models/schemas/Message.schema';
 import { ConversationType } from '~/constants/enums';
 import Conversation from '~/models/schemas/Conversation.schema';
+import { ErrorWithStatus } from '~/models/Errors';
+import USERS_MESSAGES from '~/constants/messages';
+import HTTP_STATUS from '~/constants/httpStatus';
+import { verifyToken } from '~/utils/jwt';
+import { JsonWebTokenError } from 'jsonwebtoken';
+import { verifyAccessToken } from '~/utils/common';
 
 const initSocket = (httpServer: ServerHttp) => {
   const io = new Server(httpServer, {
     cors: {
-      origin: 'http://localhost:3000'
+      origin: true, // Cho phép tất cả origins
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+      credentials: false
     }
   });
 
@@ -18,6 +27,24 @@ const initSocket = (httpServer: ServerHttp) => {
       socket_id: string;
     };
   } = {};
+
+  // io.use(async (socket, next) => {
+  //   const { Authorization } = socket.handshake.auth;
+  //   const access_token = Authorization?.split(' ')[1];
+  //   try {
+  //     const decoded_authorization = await verifyAccessToken(access_token);
+  //     // Truyền decoded_authorization vào socket để sử dụng ở các middleware khác
+  //     socket.handshake.auth.decoded_authorization = decoded_authorization;
+  //     socket.handshake.auth.access_token = access_token;
+  //     next();
+  //   } catch (error) {
+  //     next({
+  //       message: 'Unauthorized',
+  //       name: 'UnauthorizedError',
+  //       data: error
+  //     });
+  //   }
+  // });
 
   io.on('connection', (socket) => {
     console.log(`user ${socket.id} connected`);
@@ -128,7 +155,7 @@ const initSocket = (httpServer: ServerHttp) => {
         )
       ]);
 
-      socket.emit('get_new_message', conversationId);
+      socket.emit('refresh_conversations', conversationId);
       const receiver_socket_id = users[otherParticipantId]?.socket_id;
       if (receiver_socket_id) {
         socket.to(receiver_socket_id).emit('get_new_message', conversationId);

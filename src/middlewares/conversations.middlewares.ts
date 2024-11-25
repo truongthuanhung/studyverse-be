@@ -22,9 +22,25 @@ export const conversationMessagesValidator = validate(
             return true;
           }
         }
+      },
+      limit: {
+        optional: true,
+        isInt: {
+          options: { min: 1, max: 100 },
+          errorMessage: 'Limit must be between 1 and 100'
+        },
+        toInt: true
+      },
+      page: {
+        optional: true,
+        isInt: {
+          options: { min: 1 },
+          errorMessage: 'Page must be greater than or equal to 1'
+        },
+        toInt: true
       }
     },
-    ['params']
+    ['params', 'query']
   )
 );
 

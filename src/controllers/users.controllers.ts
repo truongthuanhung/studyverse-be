@@ -49,7 +49,7 @@ export const registerController = async (req: Request<ParamsDictionary, any, Reg
   await usersService.sendEmail(
     {
       header: 'Verify email',
-      content: generateEmailHTML(result.email_verify_token)
+      content: generateEmailHTML({ token: result.email_verify_token })
     },
     req.body.email
   );

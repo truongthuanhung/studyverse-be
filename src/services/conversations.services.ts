@@ -2,6 +2,7 @@ import { ObjectId } from 'mongodb';
 import databaseService from './database.services';
 import { ErrorWithStatus } from '~/models/Errors';
 import HTTP_STATUS from '~/constants/httpStatus';
+import { ConversationType } from '~/constants/enums';
 
 class ConversationsService {
   async checkValidUser(user_id: string, conversation_id: string) {
@@ -78,7 +79,7 @@ class ConversationsService {
     return result;
   }
 
-  async getConversationDetail(user_id: string, conversation_id: string) {
+  async getConversationDetail(user_id: string, conversation_id: string, limit?: number, page?: number) {
     // Get conversation first to check exists
     const conversation = await databaseService.conversations.findOne(
       { _id: new ObjectId(conversation_id) },
@@ -89,14 +90,20 @@ class ConversationsService {
       throw new Error('Conversation not found');
     }
 
-    const [messages, partner] = await Promise.all([
-      // Get messages
-      databaseService.messages
-        .find({
-          conversation_id: new ObjectId(conversation_id)
-        })
-        .sort({ created_at: 1 })
-        .toArray(),
+    // Build pagination options
+    const skip = limit && page ? (page - 1) * limit : 0;
+    const messageQuery = databaseService.messages.find({
+      conversation_id: new ObjectId(conversation_id)
+    });
+
+    const [messages, totalMessages, partner] = await Promise.all([
+      // Get messages with pagination
+      (limit ? messageQuery.limit(limit).skip(skip) : messageQuery).sort({ created_at: -1 }).toArray(),
+
+      // Get total messages count
+      databaseService.messages.countDocuments({
+        conversation_id: new ObjectId(conversation_id)
+      }),
 
       // Get partner info
       databaseService.users.findOne(
@@ -109,12 +116,54 @@ class ConversationsService {
       )
     ]);
 
+    const paginationInfo = limit
+      ? {
+          total_messages: totalMessages,
+          total_pages: Math.ceil(totalMessages / limit),
+          current_page: page || 1,
+          messages_per_page: limit
+        }
+      : null;
+
     return {
       messages: messages.map((message) => ({
         ...message,
         isSender: message.sender_id.toString() === user_id
       })),
-      partner
+      partner,
+      pagination: paginationInfo
+    };
+  }
+
+  async getUnreadMessages(user_id: string) {
+    const user_id_obj = new ObjectId(user_id);
+
+    // Tìm tất cả conversation mà user tham gia
+    const conversations = await databaseService.conversations
+      .find({
+        participants: user_id_obj
+      })
+      .toArray();
+
+    // Tính tổng số tin nhắn chưa đọc
+    const total_unread = conversations.reduce((sum, conversation) => {
+      return sum + (conversation.unread_count[user_id] ? conversation.unread_count[user_id] : 0);
+    }, 0);
+
+    return total_unread;
+  }
+
+  async checkConversationParticipants(user_id: string, partner_id: string) {
+    const conversation = await databaseService.conversations.findOne({
+      participants: {
+        $all: [new ObjectId(user_id), new ObjectId(partner_id)]
+      },
+      type: ConversationType.Direct
+    });
+
+    return {
+      existed: Boolean(conversation),
+      conversation
     };
   }
 }

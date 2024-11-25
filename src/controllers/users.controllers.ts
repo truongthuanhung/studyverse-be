@@ -49,7 +49,7 @@ export const registerController = async (req: Request<ParamsDictionary, any, Reg
   await usersService.sendEmail(
     {
       header: 'Verify email',
-      content: generateEmailHTML(result.email_verify_token)
+      content: generateEmailHTML({ token: result.email_verify_token })
     },
     req.body.email
   );
@@ -202,4 +202,13 @@ export const changePasswordController = async (
   const { password } = req.body;
   const result = await usersService.changePassword(user_id, password);
   return res.json(result);
+};
+
+export const getUsersController = async (req: Request, res: Response) => {
+  const { user_id } = req.decoded_authorization as TokenPayload;
+  const result = await usersService.getUsers(user_id);
+  return res.json({
+    message: 'Get users list successfully',
+    result
+  });
 };

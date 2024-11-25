@@ -8,11 +8,11 @@ import { Gender, TokenType, UserRole, UserVerifyStatus } from '~/constants/enums
 import RefreshToken from '~/models/schemas/RefreshToken.schema';
 import { ObjectId } from 'mongodb';
 import nodemailer from 'nodemailer';
-import { generateEmailHTML, generateForgotPasswordEmail } from '~/utils/mail';
+import { generateForgotPasswordEmail } from '~/utils/mail';
 import USERS_MESSAGES from '~/constants/messages';
 import { ErrorWithStatus } from '~/models/Errors';
-import HTTP_STATUS from '~/constants/httpStatus';
 import axios from 'axios';
+import { Follower } from '~/models/schemas/Follower.schema';
 config();
 
 class UsersService {
@@ -93,6 +93,19 @@ class UsersService {
 
   async checkEmailExist(email: string) {
     const user = await databaseService.users.findOne({ email });
+    return Boolean(user);
+  }
+
+  async checkUsernameExist(username: string) {
+    const user = await databaseService.users.findOne({ username });
+    return Boolean(user);
+  }
+
+  async findUserByIdAndPassword(user_id: string, password: string) {
+    const user = await databaseService.users.findOne({
+      _id: new ObjectId(user_id),
+      password: hashPassword(password)
+    });
     return Boolean(user);
   }
 
@@ -362,6 +375,61 @@ class UsersService {
       }
     );
     return user;
+  }
+
+  async follow(user_id: string, followed_user_id: string) {
+    const follower = await databaseService.followers.findOne({
+      user_id: new ObjectId(user_id),
+      followed_user_id: new ObjectId(followed_user_id)
+    });
+    if (follower) {
+      return {
+        message: USERS_MESSAGES.FOLLOWED
+      };
+    }
+    await databaseService.followers.insertOne(
+      new Follower({
+        user_id: new ObjectId(user_id),
+        followed_user_id: new ObjectId(followed_user_id)
+      })
+    );
+    return {
+      message: USERS_MESSAGES.FOLLOW_SUCCESSFULLY
+    };
+  }
+
+  async unfollow(user_id: string, unfollowed_user_id: string) {
+    const follower = await databaseService.followers.findOneAndDelete({
+      user_id: new ObjectId(user_id),
+      followed_user_id: new ObjectId(unfollowed_user_id)
+    });
+    if (follower) {
+      return {
+        message: USERS_MESSAGES.UNFOLLOW_SUCCESSFULLY
+      };
+    }
+    return {
+      message: USERS_MESSAGES.ALREADY_UNFOLLOWED
+    };
+  }
+
+  async changePassword(user_id: string, password: string) {
+    await databaseService.users.updateOne(
+      {
+        _id: new ObjectId(user_id)
+      },
+      {
+        $set: {
+          password: hashPassword(password)
+        },
+        $currentDate: {
+          updated_at: true
+        }
+      }
+    );
+    return {
+      message: USERS_MESSAGES.CHANGE_PASSWORD_SUCCESSFULLY
+    };
   }
 }
 

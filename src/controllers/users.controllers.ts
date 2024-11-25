@@ -6,14 +6,18 @@ import HTTP_STATUS from '~/constants/httpStatus';
 import USERS_MESSAGES from '~/constants/messages';
 import { ErrorWithStatus } from '~/models/Errors';
 import {
+  ChangePasswordRequestBody,
   EmailVerifyRequestBody,
+  FollowRequestBody,
   RefreshTokenRequestBody,
   RegisterRequestBody,
   ResetPasswordRequestBody,
   TokenPayload,
+  UnfollowRequestBody,
   UpdateMeRequestBody,
   VerifyForgotPasswordRequestBody
 } from '~/models/requests/User.requests';
+import { Follower } from '~/models/schemas/Follower.schema';
 import User from '~/models/schemas/User.schema';
 import databaseService from '~/services/database.services';
 import usersService from '~/services/users.services';
@@ -174,4 +178,28 @@ export const getProfileController = async (req: Request, res: Response, next: Ne
     message: USERS_MESSAGES.GET_PROFILE_SUCCESSFULLY,
     result: user
   });
+};
+
+export const followController = async (req: Request<ParamsDictionary, any, FollowRequestBody>, res: Response) => {
+  const { followed_user_id } = req.body;
+  const { user_id } = req.decoded_authorization as TokenPayload;
+  const result = await usersService.follow(user_id, followed_user_id);
+  return res.json(result);
+};
+
+export const unfollowController = async (req: Request<ParamsDictionary, any, UnfollowRequestBody>, res: Response) => {
+  const { unfollowed_user_id } = req.body;
+  const { user_id } = req.decoded_authorization as TokenPayload;
+  const result = await usersService.unfollow(user_id, unfollowed_user_id);
+  return res.json(result);
+};
+
+export const changePasswordController = async (
+  req: Request<ParamsDictionary, any, ChangePasswordRequestBody>,
+  res: Response
+) => {
+  const { user_id } = req.decoded_authorization as TokenPayload;
+  const { password } = req.body;
+  const result = await usersService.changePassword(user_id, password);
+  return res.json(result);
 };

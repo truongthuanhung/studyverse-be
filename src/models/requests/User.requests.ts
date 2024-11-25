@@ -59,6 +59,10 @@ export interface FollowRequestBody {
   followed_user_id: string;
 }
 
+export interface UnfollowRequestBody {
+  unfollowed_user_id: string;
+}
+
 export interface ChangePasswordRequestBody {
   old_password: string;
   password: string;

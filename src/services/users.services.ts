@@ -4,7 +4,7 @@ import { LoginRequestBody, RegisterRequestBody, UpdateMeRequestBody } from '~/mo
 import { hashPassword } from '~/utils/crypto';
 import { signToken } from '~/utils/jwt';
 import { config } from 'dotenv';
-import { Gender, TokenType, UserRole, UserVerifyStatus } from '~/constants/enums';
+import { ConversationType, Gender, TokenType, UserRole, UserVerifyStatus } from '~/constants/enums';
 import RefreshToken from '~/models/schemas/RefreshToken.schema';
 import { ObjectId } from 'mongodb';
 import nodemailer from 'nodemailer';
@@ -98,6 +98,13 @@ class UsersService {
 
   async checkUsernameExist(username: string) {
     const user = await databaseService.users.findOne({ username });
+    return Boolean(user);
+  }
+
+  async checkUserExists(user_id: string) {
+    const user = await databaseService.users.findOne({
+      _id: new ObjectId(user_id)
+    });
     return Boolean(user);
   }
 
@@ -430,6 +437,46 @@ class UsersService {
     return {
       message: USERS_MESSAGES.CHANGE_PASSWORD_SUCCESSFULLY
     };
+  }
+  async getUsers(current_user_id: string) {
+    // Lấy danh sách users
+    const users = await databaseService.users
+      .find(
+        { _id: { $ne: new ObjectId(current_user_id) } },
+        {
+          projection: {
+            password: 0,
+            email_verify_token: 0,
+            forgot_password_token: 0,
+            verify: 0,
+            created_at: 0,
+            updated_at: 0
+          }
+        }
+      )
+      .toArray();
+
+    // Lấy conversations của current user
+    const conversations = await databaseService.conversations
+      .find({
+        participants: new ObjectId(current_user_id),
+        type: ConversationType.Direct
+      })
+      .toArray();
+
+    // Map users với conversation_id tương ứng
+    const result = users.map((user) => {
+      const conversation = conversations.find((conv) =>
+        conv.participants.some((participantId) => participantId.toString() === user._id.toString())
+      );
+
+      return {
+        ...user,
+        conversation_id: conversation ? conversation._id : null
+      };
+    });
+
+    return result;
   }
 }
 

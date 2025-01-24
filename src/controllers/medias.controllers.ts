@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
 import mediasService from '~/services/medias.services';
 
-export const uploadImagesController = async (req: Request, res: Response) => {
-  const result = await mediasService.handleUploadImages(req);
+export const uploadFilesController = async (req: Request, res: Response) => {
+  const result = await mediasService.handleUploadFiles(req);
   return res.json({
-    message: 'Upload images successfully',
+    message: 'Upload files successfully',
     urls: result
   });
 };

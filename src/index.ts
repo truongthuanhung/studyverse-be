@@ -10,6 +10,12 @@ import { UPLOAD_DIRIRECTORY, UPLOAD_TEMP_DIRECTORY } from './constants/directori
 import conversationsRouter from './routes/conversations.routes';
 import { createServer } from 'http';
 import initSocket from './configs/socket';
+import studyGroupRouter from './routes/studyGroups.routes';
+import bookmarksRouter from './routes/bookmarks.routes';
+import likesRouter from './routes/likes.routes';
+import postsRouter from './routes/posts.routes';
+import commentsRouter from './routes/comments.routes';
+//import '~/utils/faker';
 config();
 
 const port = process.env.PORT || 3003;
@@ -26,7 +32,12 @@ app.use(express.json());
 
 app.use('/users', usersRouter);
 app.use('/medias', mediasRouter);
+app.use('/posts', postsRouter);
+app.use('/likes', likesRouter);
+app.use('/comments', commentsRouter);
+app.use('/bookmarks', bookmarksRouter);
 app.use('/conversations', conversationsRouter);
+app.use('/study-groups', studyGroupRouter);
 
 //ERROR HANDLER
 app.use(defaultErrorHandler);

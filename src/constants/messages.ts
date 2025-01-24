@@ -71,7 +71,8 @@ const USERS_MESSAGES = {
   USER_BANNED: 'User is banned',
   CANNOT_FOLLOW_SELF: 'Cannot follow yourself',
   CANNOT_UNFOLLOW_SELF: 'Cannot unfollow yourself',
-  OLD_PASSWORD_MUST_BE_STRING: 'Old password must be string'
+  OLD_PASSWORD_MUST_BE_STRING: 'Old password must be string',
+  NO_PERMISSION_CREATE_GROUP: 'User has no permission to create group'
 } as const;
 
 export default USERS_MESSAGES;

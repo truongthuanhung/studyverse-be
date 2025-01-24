@@ -8,51 +8,103 @@ import { getExtension, getNameFromFullname } from '~/utils/file';
 import fs from 'fs';
 
 class MediasService {
-  async handleUploadImages(req: Request) {
+  async handleUploadFiles(req: Request) {
     const form = formidable({
       uploadDir: path.resolve(UPLOAD_TEMP_DIRECTORY),
       maxFiles: 4,
       keepExtensions: true,
-      maxFileSize: 1200 * 1024,
-      filter: ({ name, originalFilename, mimetype }) => {
-        const isValidFile = name === 'image' && !!mimetype?.includes('image/');
+      maxFileSize: 10 * 1024 * 1024, // 10MB max size
+      filter: ({ name, mimetype }) => {
+        // Định nghĩa các loại file được phép
+        const allowedTypes = {
+          image: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+          video: ['video/mp4', 'video/webm'],
+          document: [
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          ]
+        };
+
+        const isValidFile =
+          name === 'files' &&
+          Object.values(allowedTypes)
+            .flat()
+            .includes(mimetype || '');
+
         if (!isValidFile) {
           form.emit('error' as any, new (formidableErrors as any).default('File type is invalid', 0, 500));
         }
         return isValidFile;
       }
     });
-    // No file uploaded?
+
     const [_, files] = await form.parse(req);
     if (Object.keys(files).length === 0) {
       throw new Error('File is empty');
     }
-    const uploadPromises = files?.image?.map(async (file) => {
+
+    const uploadPromises = files?.files?.map(async (file) => {
       const filePath = file.filepath;
-      const processedImagePath = path.join(UPLOAD_DIRIRECTORY, `${getNameFromFullname(file.newFilename)}.jpg`);
+      const mimetype = file.mimetype || '';
 
-      // Sharp handle
-      await sharp(filePath)
-        .jpeg({ quality: 90 }) // Convert to JPG with quality setting
-        .toFile(processedImagePath);
+      // Xử lý theo từng loại file
+      if (mimetype.startsWith('image/')) {
+        const processedPath = path.join(UPLOAD_DIRIRECTORY, `${getNameFromFullname(file.newFilename)}.jpg`);
 
-      // Cloudinary upload
-      const result = await cloudinary.uploader.upload(processedImagePath, {
-        folder: 'uploads',
-        resource_type: 'image'
-      });
-      try {
-        fs.unlinkSync(processedImagePath);
+        // Optimize ảnh
+        await sharp(filePath).jpeg({ quality: 90 }).toFile(processedPath);
+
+        // Upload lên Cloudinary
+        const result = await cloudinary.uploader.upload(processedPath, {
+          folder: 'uploads/images',
+          resource_type: 'image'
+        });
+
+        // Cleanup
+        fs.unlinkSync(processedPath);
         fs.unlinkSync(filePath);
-      } catch (err) {
-        console.error(err);
-      }
 
-      return result;
+        return {
+          url: result.secure_url,
+          type: 'image',
+          originalName: file.originalFilename
+        };
+      } else if (mimetype.startsWith('video/')) {
+        // Upload video trực tiếp lên Cloudinary
+        const result = await cloudinary.uploader.upload(filePath, {
+          folder: 'uploads/videos',
+          resource_type: 'video'
+        });
+
+        fs.unlinkSync(filePath);
+
+        return {
+          url: result.secure_url,
+          type: 'video',
+          originalName: file.originalFilename
+        };
+      } else {
+        // Upload documents (PDF, DOCX, XLSX...)
+        const result = await cloudinary.uploader.upload(filePath, {
+          folder: 'uploads/documents',
+          resource_type: 'raw'
+        });
+
+        fs.unlinkSync(filePath);
+
+        return {
+          url: result.secure_url,
+          type: 'document',
+          originalName: file.originalFilename
+        };
+      }
     });
 
     const results = await Promise.all(uploadPromises as any);
-    return results.map((file) => file.secure_url);
+    return results;
   }
 
   async handleUploadVideos(req: Request) {

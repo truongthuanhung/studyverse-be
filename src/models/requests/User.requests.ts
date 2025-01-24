@@ -1,5 +1,5 @@
 import { JwtPayload } from 'jsonwebtoken';
-import { Gender, TokenType, UserRole, UserVerifyStatus } from '~/constants/enums';
+import { Gender, GroupPrivacy, TokenType, UserRole, UserVerifyStatus } from '~/constants/enums';
 
 export interface LoginRequestBody {
   email: string;
@@ -71,4 +71,18 @@ export interface ChangePasswordRequestBody {
 
 export interface RefreshTokenRequestBody {
   refresh_token: string;
+}
+
+export interface CreateStudyGroupRequestBody {
+  name: string;
+  privacy: GroupPrivacy;
+  description: string;
+  cover_photo: string;
+}
+
+export interface EditStudyGroupRequestBody {
+  name?: string;
+  privacy?: GroupPrivacy;
+  description?: string;
+  cover_photo?: string;
 }

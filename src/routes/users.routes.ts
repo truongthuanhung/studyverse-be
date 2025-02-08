@@ -4,6 +4,7 @@ import {
   emailVerifyController,
   followController,
   forgotPasswordController,
+  getFollowStatsController,
   getMeController,
   getProfileController,
   getUsersController,
@@ -144,11 +145,18 @@ usersRouter.patch(
 );
 
 /**
+ * Description: Get follow stats
+ * Path: /follow-stats
+ * Method: GET
+ */
+usersRouter.get('/follow-stats', accessTokenValidator, wrapRequestHandler(getFollowStatsController));
+
+/**
  * Description: Get user profile
  * Path: /:username
  * Method: GET
  */
-usersRouter.get('/:username', wrapRequestHandler(getProfileController));
+usersRouter.get('/:username', accessTokenValidator, wrapRequestHandler(getProfileController));
 
 /**
  * Description: Follow someone

@@ -557,7 +557,8 @@ export const updateMeValidator = validate(
       },
       custom: {
         options: async (value: string, { req }) => {
-          const isUsernameExisted = await usersService.checkUsernameExist(value);
+          const { user_id } = (req as Request).decoded_authorization as TokenPayload;
+          const isUsernameExisted = await usersService.checkUsernameExist(user_id, value);
           if (isUsernameExisted) {
             throw new ErrorWithStatus({
               message: USERS_MESSAGES.USERNAME_EXISTED,
@@ -716,4 +717,43 @@ export const changePasswordValidator = validate(
       }
     }
   })
+);
+
+export const teacherValidator = async (req: Request, res: Response, next: NextFunction) => {
+  const { user_id } = req.decoded_authorization as TokenPayload;
+  const user = await databaseService.users.findOne({ _id: new ObjectId(user_id) });
+  if (!user || user.role !== UserRole.Teacher) {
+    next(
+      new ErrorWithStatus({
+        message: USERS_MESSAGES.NO_PERMISSION_CREATE_GROUP,
+        status: HTTP_STATUS.FORBIDDEN
+      })
+    );
+  }
+  next();
+};
+
+export const userIdParamValidator = validate(
+  checkSchema(
+    {
+      user_id: {
+        isMongoId: {
+          errorMessage: 'User_id must be a valid Mongo ID'
+        },
+        custom: {
+          options: async (value: string) => {
+            const isExisted = await usersService.checkUserExists(value);
+            if (!isExisted) {
+              throw new ErrorWithStatus({
+                message: USERS_MESSAGES.USER_NOT_FOUND,
+                status: HTTP_STATUS.NOT_FOUND
+              });
+            }
+            return true;
+          }
+        }
+      }
+    },
+    ['params']
+  )
 );

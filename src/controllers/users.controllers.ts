@@ -17,7 +17,6 @@ import {
   UpdateMeRequestBody,
   VerifyForgotPasswordRequestBody
 } from '~/models/requests/User.requests';
-import { Follower } from '~/models/schemas/Follower.schema';
 import User from '~/models/schemas/User.schema';
 import databaseService from '~/services/database.services';
 import usersService from '~/services/users.services';
@@ -138,19 +137,10 @@ export const resetPasswordController = async (
 
 export const getMeController = async (req: Request, res: Response, next: NextFunction) => {
   const { user_id } = req.decoded_authorization as TokenPayload;
-  const user = await databaseService.users.findOne(
-    { _id: new ObjectId(user_id) },
-    {
-      projection: {
-        password: 0,
-        email_verify_token: 0,
-        forgot_password_token: 0
-      }
-    }
-  );
+  const result = await usersService.getMe(user_id);
   return res.json({
     message: USERS_MESSAGES.GET_ME_SUCCESSFULLY,
-    result: user
+    result
   });
 };
 
@@ -165,7 +155,8 @@ export const updateMeController = async (req: Request<ParamsDictionary, any, Upd
 
 export const getProfileController = async (req: Request, res: Response, next: NextFunction) => {
   const { username } = req.params;
-  const user = await usersService.getProfile(username);
+  const { user_id } = req.decoded_authorization as TokenPayload;
+  const user = await usersService.getProfile(username, user_id);
   if (!user) {
     return next(
       new ErrorWithStatus({
@@ -192,6 +183,15 @@ export const unfollowController = async (req: Request<ParamsDictionary, any, Unf
   const { user_id } = req.decoded_authorization as TokenPayload;
   const result = await usersService.unfollow(user_id, unfollowed_user_id);
   return res.json(result);
+};
+
+export const getFollowStatsController = async (req: Request, res: Response) => {
+  const { user_id } = req.decoded_authorization as TokenPayload;
+  const result = await usersService.getFollowStats(user_id);
+  return res.json({
+    message: 'Get follow stats successfully',
+    result
+  });
 };
 
 export const changePasswordController = async (

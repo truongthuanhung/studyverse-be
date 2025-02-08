@@ -12,6 +12,9 @@ import Post from '~/models/schemas/Post.schema';
 import Bookmark from '~/models/schemas/Bookmark.schema';
 import Like from '~/models/schemas/Like.schema';
 import Comment from '~/models/schemas/Comment.schema';
+import Question from '~/models/schemas/Question.schema';
+import Vote from '~/models/schemas/Vote.schema';
+import Reply from '~/models/schemas/Reply.schema';
 
 config();
 const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@studyverse.otnmy.mongodb.net/?retryWrites=true&w=majority&appName=StudyVerse`;
@@ -27,11 +30,39 @@ class DatabaseService {
       // Send a ping to confirm a successful connection
       await this.db.command({ ping: 1 });
       console.log('Pinged your deployment. You successfully connected to MongoDB!');
+      //await this.createIndexes();
+      //await this.removeIndexes();
+      //await this.checkIndexes();
     } catch (err) {
       console.log(err);
       throw err;
     }
   }
+  private async checkIndexes() {
+    const indexes = await databaseService.questions.indexes();
+    console.log('Indexes:', indexes);
+  }
+  private async createIndexes() {
+    try {
+      await this.questions.createIndex({ group_id: 1, created_at: -1 });
+      await this.votes.createIndex({ target_id: 1, user_id: 1, type: 1 });
+      await this.replies.createIndex({ question_id: 1 });
+      console.log('Indexes created successfully!');
+    } catch (error) {
+      console.error('Error creating indexes:', error);
+    }
+  }
+  private async removeIndexes() {
+    try {
+      await this.questions.dropIndex('group_id_1_created_at_-1');
+      await this.votes.dropIndex('target_id_1_user_id_1_type_1');
+      await this.replies.dropIndex('question_id_1');
+      console.log('Indexes deleted successfully');
+    } catch (error) {
+      console.error('Error deleting indexes:', error);
+    }
+  }
+
   get users(): Collection<User> {
     return this.db.collection('users');
   }
@@ -67,6 +98,15 @@ class DatabaseService {
   }
   get join_requests(): Collection<JoinRequest> {
     return this.db.collection('join_requests');
+  }
+  get questions(): Collection<Question> {
+    return this.db.collection('questions');
+  }
+  get votes(): Collection<Vote> {
+    return this.db.collection('votes');
+  }
+  get replies(): Collection<Reply> {
+    return this.db.collection('replies');
   }
 }
 

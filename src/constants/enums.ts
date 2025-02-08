@@ -55,3 +55,20 @@ export enum LikeType {
   PostLike,
   CommentLike
 }
+
+export enum QuestionStatus {
+  Pending,
+  Open,
+  Resolved,
+  Closed
+}
+
+export enum VoteType {
+  Upvote,
+  Downvote
+}
+
+export enum GroupTargetType {
+  Question,
+  Reply
+}

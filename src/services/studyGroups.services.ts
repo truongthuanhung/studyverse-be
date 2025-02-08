@@ -1,4 +1,3 @@
-import { CreateStudyGroupRequestBody, EditStudyGroupRequestBody } from '~/models/requests/User.requests';
 import databaseService from './database.services';
 import StudyGroup from '~/models/schemas/StudyGroup.schema';
 import { ObjectId } from 'mongodb';
@@ -7,6 +6,7 @@ import { StudyGroupRole } from '~/constants/enums';
 import { ErrorWithStatus } from '~/models/Errors';
 import HTTP_STATUS from '~/constants/httpStatus';
 import JoinRequest from '~/models/schemas/JoinRequest.schema';
+import { CreateStudyGroupRequestBody, EditStudyGroupRequestBody } from '~/models/requests/StudyGroup.requests';
 
 class StudyGroupsService {
   async isGroupExists(group_id: string) {
@@ -71,7 +71,37 @@ class StudyGroupsService {
     }
   }
 
-  async editStudyGroup(study_group_id: string, payload: EditStudyGroupRequestBody) {}
+  async editStudyGroup(group_id: string, payload: EditStudyGroupRequestBody) {
+    if (!Object.keys(payload).length) {
+      throw new ErrorWithStatus({
+        message: 'Payload is invalid',
+        status: HTTP_STATUS.BAD_REQUEST
+      });
+    }
+    const group = await databaseService.study_groups.findOneAndUpdate(
+      {
+        _id: new ObjectId(group_id)
+      },
+      {
+        $set: {
+          ...payload
+        },
+        $currentDate: {
+          updated_at: true
+        }
+      },
+      {
+        returnDocument: 'after'
+      }
+    );
+    if (!group) {
+      throw new ErrorWithStatus({
+        message: 'Group not found',
+        status: HTTP_STATUS.NOT_FOUND
+      });
+    }
+    return group;
+  }
 
   async getStudyGroups(user_id: string, type: string = 'all') {
     const matchStage: any = {
@@ -89,32 +119,7 @@ class StudyGroupsService {
           from: 'study_groups',
           localField: 'group_id',
           foreignField: '_id',
-          as: 'groupDetails',
-          pipeline: [
-            {
-              $lookup: {
-                from: 'study_group_members',
-                let: { groupId: '$_id' },
-                pipeline: [
-                  { $match: { $expr: { $eq: ['$group_id', '$$groupId'] } } },
-                  { $group: { _id: null, memberCount: { $sum: 1 } } }
-                ],
-                as: 'memberInfo'
-              }
-            },
-            {
-              $project: {
-                _id: 1,
-                name: 1,
-                privacy: 1,
-                description: 1,
-                cover_photo: 1,
-                member: { $ifNull: [{ $arrayElemAt: ['$memberInfo.memberCount', 0] }, 0] },
-                created_at: 1,
-                updated_at: 1
-              }
-            }
-          ]
+          as: 'groupDetails'
         }
       },
       { $unwind: '$groupDetails' },
@@ -124,11 +129,9 @@ class StudyGroupsService {
           name: '$groupDetails.name',
           privacy: '$groupDetails.privacy',
           description: '$groupDetails.description',
-          member: '$groupDetails.member',
           cover_photo: '$groupDetails.cover_photo',
           role: '$role',
-          created_at: '$groupDetails.created_at',
-          updated_at: '$groupDetails.updated_at'
+          joined_at: '$created_at'
         }
       }
     ];
@@ -138,17 +141,13 @@ class StudyGroupsService {
 
   async getStudyGroupById(user_id: string, group_id: string) {
     const pipeline = [
-      // Lọc study_groups theo _id
-      {
-        $match: {
-          _id: new ObjectId(group_id)
-        }
-      },
+      // Filter study_groups by id
+      { $match: { _id: new ObjectId(group_id) } },
 
-      // Join với study_group_members để lấy thông tin vai trò của user
+      // Join with study_group_members to get user's role
       {
         $lookup: {
-          from: 'study_group_members', // Tên collection
+          from: 'study_group_members',
           let: { groupId: '$_id' },
           pipeline: [
             {
@@ -162,7 +161,7 @@ class StudyGroupsService {
         }
       },
 
-      // Join với study_group_members để đếm số lượng thành viên trong nhóm
+      // Join with study_group_members to count members
       {
         $lookup: {
           from: 'study_group_members',
@@ -172,7 +171,7 @@ class StudyGroupsService {
         }
       },
 
-      // Định dạng lại dữ liệu đầu ra
+      // Project the output data
       {
         $project: {
           _id: 1,
@@ -183,17 +182,37 @@ class StudyGroupsService {
           cover_photo: 1,
           created_at: 1,
           updated_at: 1,
-          role: { $arrayElemAt: ['$userRole.role', 0] }, // Lấy role của user (nếu có)
-          member: { $arrayElemAt: ['$memberInfo.memberCount', 0] } // Lấy số lượng thành viên
+          role: { $arrayElemAt: ['$userRole.role', 0] }, // Get user's role
+          members: { $arrayElemAt: ['$memberInfo.memberCount', 0] } // Get member count
         }
       }
     ];
 
-    // Thực thi pipeline
+    // Execute pipeline
     const result = await databaseService.study_groups.aggregate(pipeline).toArray();
 
-    // Trả về group đầu tiên (nếu tồn tại)
-    return result.length > 0 ? result[0] : null;
+    // Process the result
+    if (result.length > 0) {
+      const group = result[0];
+
+      // Assign Guest role if no role exists
+      group.role = group.role ?? StudyGroupRole.Guest;
+
+      // If role is Guest, check for existing join request
+      if (group.role === StudyGroupRole.Guest) {
+        const joinRequest = await databaseService.join_requests.findOne({
+          user_id: new ObjectId(user_id),
+          group_id: new ObjectId(group_id)
+        });
+
+        group.hasRequested = !!joinRequest;
+      }
+
+      return group;
+    }
+
+    // Return null if group not found
+    return null;
   }
 
   async getUserRoleInGroup(user_id: string, group_id: string) {
@@ -237,6 +256,31 @@ class StudyGroupsService {
         group_id: new ObjectId(group_id)
       })
     );
+    return result;
+  }
+
+  async cancelJoinRequest(user_id: string, group_id: string) {
+    const isUserJoined = await this.checkUserInGroup(user_id, group_id);
+
+    if (isUserJoined) {
+      throw new ErrorWithStatus({
+        message: 'User is already a member of this group.',
+        status: HTTP_STATUS.BAD_REQUEST
+      });
+    }
+
+    const result = await databaseService.join_requests.findOneAndDelete({
+      user_id: new ObjectId(user_id),
+      group_id: new ObjectId(group_id)
+    });
+
+    if (!result) {
+      throw new ErrorWithStatus({
+        message: 'User has not requested yet',
+        status: HTTP_STATUS.BAD_REQUEST
+      });
+    }
+
     return result;
   }
 
@@ -354,17 +398,169 @@ class StudyGroupsService {
         {
           $project: {
             _id: 1,
-            user_id: 1,
             group_id: 1,
             created_at: 1,
-            'user_details.avatar': 1,
-            'user_details.name': 1
+            user_info: {
+              _id: '$user_details._id',
+              name: '$user_details.name',
+              username: '$user_details.username',
+              avatar: '$user_details.avatar'
+            }
           }
         }
       ])
       .toArray();
 
     return join_requests;
+  }
+
+  async getMembers(group_id: string, role?: StudyGroupRole) {
+    const matchStage: any = {
+      $match: {
+        group_id: new ObjectId(group_id)
+      }
+    };
+
+    // Nếu có tham số role, thêm điều kiện lọc
+    if (role !== undefined) {
+      matchStage.$match.role = role;
+    }
+
+    const members = await databaseService.study_group_members
+      .aggregate([
+        matchStage,
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'user_id',
+            foreignField: '_id',
+            as: 'user_details'
+          }
+        },
+        { $unwind: '$user_details' },
+        {
+          $project: {
+            _id: 1,
+            group_id: 1,
+            role: 1,
+            created_at: 1,
+            user_info: {
+              _id: '$user_details._id',
+              name: '$user_details.name',
+              username: '$user_details.username',
+              avatar: '$user_details.avatar'
+            }
+          }
+        }
+      ])
+      .toArray();
+
+    return members;
+  }
+
+  async promoteMember({
+    group_id,
+    user_id,
+    current_user_id
+  }: {
+    group_id: string;
+    user_id: string;
+    current_user_id: string;
+  }) {
+    if (user_id === current_user_id) {
+      throw new ErrorWithStatus({
+        message: 'Cannot remove yourself',
+        status: HTTP_STATUS.CONFLICT
+      });
+    }
+    const groupObjectId = new ObjectId(group_id);
+    const userObjectId = new ObjectId(user_id);
+
+    const result = await databaseService.study_group_members.findOneAndUpdate(
+      { group_id: groupObjectId, user_id: userObjectId, role: StudyGroupRole.Member },
+      {
+        $set: { role: StudyGroupRole.Admin, updated_at: new Date() }
+      },
+      { returnDocument: 'after' }
+    );
+
+    if (!result) {
+      throw new ErrorWithStatus({
+        message: 'Member not found',
+        status: HTTP_STATUS.NOT_FOUND
+      });
+    }
+
+    return result;
+  }
+
+  async demoteMember({
+    group_id,
+    user_id,
+    current_user_id
+  }: {
+    group_id: string;
+    user_id: string;
+    current_user_id: string;
+  }) {
+    if (user_id === current_user_id) {
+      throw new ErrorWithStatus({
+        message: 'Cannot remove yourself',
+        status: HTTP_STATUS.CONFLICT
+      });
+    }
+    const groupObjectId = new ObjectId(group_id);
+    const userObjectId = new ObjectId(user_id);
+
+    const result = await databaseService.study_group_members.findOneAndUpdate(
+      { group_id: groupObjectId, user_id: userObjectId, role: StudyGroupRole.Admin },
+      {
+        $set: { role: StudyGroupRole.Member, updated_at: new Date() }
+      },
+      { returnDocument: 'after' }
+    );
+
+    if (!result) {
+      throw new ErrorWithStatus({
+        message: 'Member not found',
+        status: HTTP_STATUS.NOT_FOUND
+      });
+    }
+
+    return result;
+  }
+
+  async removeMember({
+    group_id,
+    user_id,
+    current_user_id
+  }: {
+    group_id: string;
+    user_id: string;
+    current_user_id: string;
+  }) {
+    if (user_id === current_user_id) {
+      throw new ErrorWithStatus({
+        message: 'Cannot remove yourself',
+        status: HTTP_STATUS.CONFLICT
+      });
+    }
+    const groupObjectId = new ObjectId(group_id);
+    const userObjectId = new ObjectId(user_id);
+
+    const result = await databaseService.study_group_members.findOneAndDelete({
+      group_id: groupObjectId,
+      user_id: userObjectId
+    });
+
+    if (!result) {
+      throw new ErrorWithStatus({
+        message: 'Member not found',
+        status: HTTP_STATUS.NOT_FOUND
+      });
+    }
+
+    return result;
   }
 }
 

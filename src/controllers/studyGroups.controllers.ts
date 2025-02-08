@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
 import { ParamsDictionary } from 'express-serve-static-core';
-import { StudyGroupRole } from '~/constants/enums';
 import HTTP_STATUS from '~/constants/httpStatus';
-import { CreateStudyGroupRequestBody, TokenPayload } from '~/models/requests/User.requests';
+import { CreateStudyGroupRequestBody, EditStudyGroupRequestBody } from '~/models/requests/StudyGroup.requests';
+import { TokenPayload } from '~/models/requests/User.requests';
 import studyGroupsService from '~/services/studyGroups.services';
 
 export const createStudyGroupController = async (
@@ -31,11 +31,21 @@ export const getStudyGroupsController = async (req: Request, res: Response) => {
 
 export const getStudyGroupByIdController = async (req: Request, res: Response) => {
   const { user_id } = req.decoded_authorization as TokenPayload;
-  const { study_group_id } = req.params;
+  const { group_id } = req.params;
 
-  const result = await studyGroupsService.getStudyGroupById(user_id, study_group_id);
+  const result = await studyGroupsService.getStudyGroupById(user_id, group_id);
   return res.json({
     message: 'Get study group successfully',
+    result
+  });
+};
+
+export const editStudyGroupController = async (req: Request, res: Response) => {
+  const { group_id } = req.params;
+  const payload = req.body as EditStudyGroupRequestBody;
+  const result = await studyGroupsService.editStudyGroup(group_id, payload);
+  return res.json({
+    message: 'Edit study group successfully',
     result
   });
 };
@@ -64,6 +74,16 @@ export const requestToJoinGroupController = async (req: Request, res: Response) 
   });
 };
 
+export const cancelJoinRequestController = async (req: Request, res: Response) => {
+  const { user_id } = req.decoded_authorization as TokenPayload;
+  const { group_id } = req.params;
+  const result = await studyGroupsService.cancelJoinRequest(user_id, group_id);
+  return res.json({
+    message: 'Cancel join request successfully',
+    result
+  });
+};
+
 export const acceptJoinRequestController = async (req: Request, res: Response) => {
   const { user_id } = req.decoded_authorization as TokenPayload;
   const { join_request_id } = req.params;
@@ -83,6 +103,48 @@ export const getJoinRequestsController = async (req: Request, res: Response) => 
   const result = await studyGroupsService.getJoinRequests(group_id);
   return res.json({
     message: 'Get join requests successfully',
+    result
+  });
+};
+
+export const getMembersController = async (req: Request, res: Response) => {
+  const { group_id } = req.params;
+  const { role } = req.query;
+
+  const roleEnum = role !== undefined ? Number(role) : undefined;
+  const result = await studyGroupsService.getMembers(group_id, roleEnum);
+  return res.json({
+    message: 'Get study group members successfully',
+    result
+  });
+};
+
+export const promoteMemberController = async (req: Request, res: Response) => {
+  const { group_id, user_id } = req.params;
+  const current_user_id = req.decoded_authorization?.user_id as string;
+  const result = await studyGroupsService.promoteMember({ group_id, user_id, current_user_id });
+  return res.json({
+    message: 'Promote member successfully',
+    result
+  });
+};
+
+export const demoteMemberController = async (req: Request, res: Response) => {
+  const { group_id, user_id } = req.params;
+  const current_user_id = req.decoded_authorization?.user_id as string;
+  const result = await studyGroupsService.demoteMember({ group_id, user_id, current_user_id });
+  return res.json({
+    message: 'Demote member successfully',
+    result
+  });
+};
+
+export const removeMemberController = async (req: Request, res: Response) => {
+  const { group_id, user_id } = req.params;
+  const current_user_id = req.decoded_authorization?.user_id as string;
+  const result = await studyGroupsService.removeMember({ group_id, user_id, current_user_id });
+  return res.json({
+    message: 'Remove member successfully',
     result
   });
 };

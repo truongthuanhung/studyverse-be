@@ -52,19 +52,19 @@ class MediasService {
 
       // Xử lý theo từng loại file
       if (mimetype.startsWith('image/')) {
-        const processedPath = path.join(UPLOAD_DIRIRECTORY, `${getNameFromFullname(file.newFilename)}.jpg`);
+        // const processedPath = path.join(UPLOAD_DIRIRECTORY, `${getNameFromFullname(file.newFilename)}.jpg`);
 
-        // Optimize ảnh
-        await sharp(filePath).jpeg({ quality: 90 }).toFile(processedPath);
+        // // Optimize ảnh
+        // await sharp(filePath).jpeg({ quality: 90 }).toFile(processedPath);
 
         // Upload lên Cloudinary
-        const result = await cloudinary.uploader.upload(processedPath, {
+        const result = await cloudinary.uploader.upload(filePath, {
           folder: 'uploads/images',
           resource_type: 'image'
         });
 
         // Cleanup
-        fs.unlinkSync(processedPath);
+        // fs.unlinkSync(processedPath);
         fs.unlinkSync(filePath);
 
         return {

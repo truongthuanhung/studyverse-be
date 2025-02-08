@@ -72,17 +72,3 @@ export interface ChangePasswordRequestBody {
 export interface RefreshTokenRequestBody {
   refresh_token: string;
 }
-
-export interface CreateStudyGroupRequestBody {
-  name: string;
-  privacy: GroupPrivacy;
-  description: string;
-  cover_photo: string;
-}
-
-export interface EditStudyGroupRequestBody {
-  name?: string;
-  privacy?: GroupPrivacy;
-  description?: string;
-  cover_photo?: string;
-}

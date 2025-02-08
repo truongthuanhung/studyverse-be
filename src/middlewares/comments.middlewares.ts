@@ -126,7 +126,7 @@ export const commentIdValidator = validate(
     {
       comment_id: {
         isMongoId: {
-          errorMessage: 'Invalid post id'
+          errorMessage: 'Invalid comment id'
         },
         custom: {
           options: async (value: string) => {

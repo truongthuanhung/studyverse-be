@@ -12,8 +12,16 @@ import { verifyToken } from '~/utils/jwt';
 import { JsonWebTokenError } from 'jsonwebtoken';
 import { verifyAccessToken } from '~/utils/common';
 
+let io: Server;
+
+const users: {
+  [key: string]: {
+    socket_id: string;
+  };
+} = {};
+
 const initSocket = (httpServer: ServerHttp) => {
-  const io = new Server(httpServer, {
+  io = new Server(httpServer, {
     cors: {
       origin: true, // Cho phép tất cả origins
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -21,12 +29,6 @@ const initSocket = (httpServer: ServerHttp) => {
       credentials: false
     }
   });
-
-  const users: {
-    [key: string]: {
-      socket_id: string;
-    };
-  } = {};
 
   // io.use(async (socket, next) => {
   //   const { Authorization } = socket.handshake.auth;
@@ -246,6 +248,17 @@ const initSocket = (httpServer: ServerHttp) => {
       console.log(`user ${socket.id} disconnected`);
     });
   });
+};
+
+export const getIO = () => {
+  if (!io) {
+    throw new Error('Socket.io not initialized');
+  }
+  return io;
+};
+
+export const getUserSocketId = (userId: string) => {
+  return users[userId]?.socket_id;
 };
 
 export default initSocket;

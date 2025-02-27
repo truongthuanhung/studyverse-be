@@ -15,6 +15,7 @@ import Comment from '~/models/schemas/Comment.schema';
 import Question from '~/models/schemas/Question.schema';
 import Vote from '~/models/schemas/Vote.schema';
 import Reply from '~/models/schemas/Reply.schema';
+import Notification from '~/models/schemas/Notification.schema';
 
 config();
 const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@studyverse.otnmy.mongodb.net/?retryWrites=true&w=majority&appName=StudyVerse`;
@@ -107,6 +108,9 @@ class DatabaseService {
   }
   get replies(): Collection<Reply> {
     return this.db.collection('replies');
+  }
+  get notifications(): Collection<Notification> {
+    return this.db.collection('notifications');
   }
 }
 

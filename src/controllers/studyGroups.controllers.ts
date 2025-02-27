@@ -107,6 +107,15 @@ export const getJoinRequestsController = async (req: Request, res: Response) => 
   });
 };
 
+export const getJoinRequestsCountController = async (req: Request, res: Response) => {
+  const { group_id } = req.params;
+  const result = await studyGroupsService.getJoinRequestsCount(group_id);
+  return res.json({
+    message: 'Get join requests count successfully',
+    result
+  });
+};
+
 export const getMembersController = async (req: Request, res: Response) => {
   const { group_id } = req.params;
   const { role } = req.query;

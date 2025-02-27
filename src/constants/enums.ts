@@ -60,7 +60,8 @@ export enum QuestionStatus {
   Pending,
   Open,
   Resolved,
-  Closed
+  Closed,
+  Rejected
 }
 
 export enum VoteType {
@@ -71,4 +72,14 @@ export enum VoteType {
 export enum GroupTargetType {
   Question,
   Reply
+}
+
+export enum NotificationType {
+  Group,
+  Personal
+}
+
+export enum NotificationStatus {
+  Unread,
+  Read
 }

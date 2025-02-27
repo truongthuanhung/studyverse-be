@@ -7,7 +7,7 @@ import votesService from '~/services/votes.services';
 
 export const voteQuestionController = async (req: Request<ParamsDictionary, any, VoteRequestBody>, res: Response) => {
   const { user_id } = req.decoded_authorization as TokenPayload;
-  const { question_id } = req.params;
+  const { question_id, group_id } = req.params;
 
   const result = await votesService.vote({
     user_id,

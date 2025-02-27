@@ -3,10 +3,18 @@ import {
   createReplyController,
   deleteReplyController,
   editReplyController,
-  getRepliesByQuestionIdController
+  getRepliesByQuestionIdController,
+  getReplyByIdController,
+  voteReplyController
 } from '~/controllers/replies.controllers';
 import { filterMiddleware, paginationValidator } from '~/middlewares/common.middlewares';
-import { createReplyValidator, deleteReplyValidator, editReplyValidator } from '~/middlewares/replies.middlewares';
+import {
+  createReplyValidator,
+  deleteReplyValidator,
+  editReplyValidator,
+  replyIdValidator,
+  voteReplyValidator
+} from '~/middlewares/replies.middlewares';
 import { validateGroupQuestionAndMembership } from '~/middlewares/studyGroups.middlewares';
 import { accessTokenValidator } from '~/middlewares/users.middlewares';
 import { wrapRequestHandler } from '~/utils/handlers';
@@ -29,6 +37,14 @@ repliesRouter.get(
   wrapRequestHandler(getRepliesByQuestionIdController)
 );
 
+repliesRouter.post(
+  '/:reply_id/votes',
+  accessTokenValidator,
+  validateGroupQuestionAndMembership,
+  voteReplyValidator,
+  wrapRequestHandler(voteReplyController)
+);
+
 repliesRouter.delete(
   '/:reply_id',
   accessTokenValidator,
@@ -44,6 +60,13 @@ repliesRouter.patch(
   editReplyValidator,
   filterMiddleware(['content', 'medias']),
   wrapRequestHandler(editReplyController)
+);
+
+repliesRouter.get(
+  '/:reply_id',
+  accessTokenValidator,
+  validateGroupQuestionAndMembership,
+  wrapRequestHandler(getReplyByIdController)
 );
 
 export default repliesRouter;

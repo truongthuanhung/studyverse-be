@@ -426,12 +426,9 @@ class UsersService {
     };
   }
 
-  async getProfile(username: string, viewer_id?: string) {
-    // Tìm user dựa trên username
-    const user = await databaseService.users.findOne(
-      {
-        username
-      },
+  async getProfile(identifier: string, viewer_id?: string) {
+    let user = await databaseService.users.findOne(
+      { username: identifier },
       {
         projection: {
           password: 0,
@@ -444,8 +441,25 @@ class UsersService {
       }
     );
 
+    // Nếu không tìm thấy theo username, thử tìm theo _id
+    if (!user && ObjectId.isValid(identifier)) {
+      user = await databaseService.users.findOne(
+        { _id: new ObjectId(identifier) },
+        {
+          projection: {
+            password: 0,
+            email_verify_token: 0,
+            forgot_password_token: 0,
+            verify: 0,
+            created_at: 0,
+            updated_at: 0
+          }
+        }
+      );
+    }
+
     if (!user) {
-      return null; // Nếu không tìm thấy user
+      return null; // Không tìm thấy user theo cả username và _id
     }
 
     const userObjectId = new ObjectId(user._id);
@@ -497,7 +511,7 @@ class UsersService {
 
     // Kiểm tra xem viewer có follow user này không
     let isFollowedPromise = Promise.resolve(false);
-    if (viewer_id) {
+    if (viewer_id && ObjectId.isValid(viewer_id)) {
       isFollowedPromise = databaseService.followers
         .countDocuments({
           user_id: new ObjectId(viewer_id),

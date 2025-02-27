@@ -11,11 +11,12 @@ interface IQuestion {
   tags: ObjectId[];
   medias: string[];
   mentions: ObjectId[];
+  approved_at?: Date | null;
   created_at?: Date;
   updated_at?: Date;
 }
 
-class Question {
+export default class Question {
   _id?: ObjectId;
   title: string;
   content: string;
@@ -25,6 +26,7 @@ class Question {
   tags: ObjectId[];
   medias: string[];
   mentions: ObjectId[];
+  approved_at: Date | null;
   created_at: Date;
   updated_at: Date;
   constructor(question: IQuestion) {
@@ -38,9 +40,8 @@ class Question {
     this.tags = question.tags;
     this.medias = question.medias;
     this.mentions = question.mentions;
+    this.approved_at = question.approved_at || null;
     this.created_at = question.created_at || date;
     this.updated_at = question.updated_at || date;
   }
 }
-
-export default Question;

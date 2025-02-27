@@ -8,6 +8,7 @@ import {
   demoteMemberController,
   editStudyGroupController,
   getJoinRequestsController,
+  getJoinRequestsCountController,
   getMembersController,
   getStudyGroupByIdController,
   getStudyGroupsController,
@@ -123,6 +124,14 @@ studyGroupRouter.post(
   groupAdminValidator,
   joinRequestValidator,
   wrapRequestHandler(declineJoinRequestController)
+);
+
+studyGroupRouter.get(
+  '/:group_id/join-requests-count',
+  accessTokenValidator,
+  groupIdValidator,
+  groupAdminValidator,
+  wrapRequestHandler(getJoinRequestsCountController)
 );
 
 studyGroupRouter.get(

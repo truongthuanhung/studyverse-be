@@ -1,19 +1,29 @@
 import { Router } from 'express';
 import {
+  approveQuestionController,
   createQuestionController,
+  deleteQuestionController,
   editQuestionController,
+  getPendingQuestionsCountController,
   getQuestionByIdController,
-  getQuestionsByGroupIdController
+  getQuestionsByGroupIdController,
+  rejectQuestionController
 } from '~/controllers/questions.controllers';
 import { filterMiddleware } from '~/middlewares/common.middlewares';
-import { getQuestionsValidator } from '~/middlewares/questions.middlewares';
 import {
+  approveQuestionValidator,
+  getQuestionsValidator,
+  rejectQuestionValidator
+} from '~/middlewares/questions.middlewares';
+import {
+  adminValidator,
   createQuestionValidator,
+  deleteQuestionValidator,
   editQuestionValidator,
   groupIdValidator,
   groupMemberValidator,
-  questionIdValidator,
   questionOwnerValidator,
+  validateGroupMembership,
   validateGroupQuestionAndMembership
 } from '~/middlewares/studyGroups.middlewares';
 import { accessTokenValidator } from '~/middlewares/users.middlewares';
@@ -26,8 +36,7 @@ const questionsRouter = Router({ mergeParams: true });
 questionsRouter.post(
   '/',
   accessTokenValidator,
-  groupIdValidator,
-  groupMemberValidator,
+  validateGroupMembership,
   createQuestionValidator,
   wrapRequestHandler(createQuestionController)
 );
@@ -41,16 +50,48 @@ questionsRouter.get(
   wrapRequestHandler(getQuestionsByGroupIdController)
 );
 
+questionsRouter.get(
+  '/pending-count',
+  accessTokenValidator,
+  validateGroupMembership,
+  adminValidator,
+  wrapRequestHandler(getPendingQuestionsCountController)
+);
+
+questionsRouter.patch(
+  '/:question_id/approve',
+  accessTokenValidator,
+  validateGroupQuestionAndMembership,
+  adminValidator,
+  approveQuestionValidator,
+  wrapRequestHandler(approveQuestionController)
+);
+
+questionsRouter.patch(
+  '/:question_id/reject',
+  accessTokenValidator,
+  validateGroupQuestionAndMembership,
+  adminValidator,
+  rejectQuestionValidator,
+  wrapRequestHandler(rejectQuestionController)
+);
+
 questionsRouter.patch(
   '/:question_id',
   accessTokenValidator,
-  groupIdValidator,
-  groupMemberValidator,
-  questionIdValidator,
+  validateGroupQuestionAndMembership,
   questionOwnerValidator,
   editQuestionValidator,
   filterMiddleware(['title', 'content', 'tags', 'mentions', 'medias']),
   wrapRequestHandler(editQuestionController)
+);
+
+questionsRouter.delete(
+  '/:question_id',
+  accessTokenValidator,
+  validateGroupQuestionAndMembership,
+  deleteQuestionValidator,
+  wrapRequestHandler(deleteQuestionController)
 );
 
 questionsRouter.get(

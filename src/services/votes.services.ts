@@ -1,9 +1,70 @@
 import databaseService from './database.services';
 import { ObjectId } from 'mongodb';
 import Vote from '~/models/schemas/Vote.schema';
-import { GroupTargetType, VoteType } from '~/constants/enums';
+import { GroupTargetType, NotificationType, VoteType } from '~/constants/enums';
+import notificationsService from './notifications.services';
 
 class VotesService {
+  private async getTargetUrl(target_id: string, target_type: GroupTargetType): Promise<string | null> {
+    try {
+      if (target_type === GroupTargetType.Question) {
+        const question = await databaseService.questions.findOne({ _id: new ObjectId(target_id) });
+        if (question) {
+          return `/groups/${question.group_id}/questions/${question._id}`;
+        }
+      } else if (target_type === GroupTargetType.Reply) {
+        const reply = await databaseService.replies.findOne({ _id: new ObjectId(target_id) });
+        if (reply) {
+          const question = await databaseService.questions.findOne({ _id: reply.question_id });
+          if (question) {
+            return `/groups/${question.group_id}/questions/${question._id}?replyId=${reply._id}`;
+          }
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error('Error building target URL:', error);
+      return null;
+    }
+  }
+
+  private async createVoteNotification(
+    user_id: string,
+    target_id: string,
+    target_type: GroupTargetType,
+    vote_type: VoteType
+  ) {
+    // Lấy thông tin về owner của target (người cần nhận thông báo)
+    let target_owner_id;
+
+    if (target_type === GroupTargetType.Question) {
+      const question = await databaseService.questions.findOne({ _id: new ObjectId(target_id) });
+      if (question) {
+        target_owner_id = question.user_id.toString();
+      }
+    } else if (target_type === GroupTargetType.Reply) {
+      const reply = await databaseService.replies.findOne({ _id: new ObjectId(target_id) });
+      if (reply) {
+        target_owner_id = reply.user_id.toString();
+      }
+    }
+
+    // Nếu người vote không phải là owner của target
+    if (target_owner_id && target_owner_id !== user_id) {
+      const content = vote_type === VoteType.Upvote ? 'has upvoted' : 'has downvoted';
+      const target_url = await this.getTargetUrl(target_id, target_type);
+
+      await notificationsService.createNotification({
+        user_id: target_owner_id,
+        actor_id: user_id,
+        reference_id: target_id,
+        type: NotificationType.Group,
+        content: `${content} ${target_type === GroupTargetType.Question ? 'your question' : 'your reply'}`,
+        target_url: target_url ?? undefined // Add the target URL to the notification
+      });
+    }
+  }
+
   async vote({
     user_id,
     target_id,
@@ -38,6 +99,7 @@ class VotesService {
           },
           { returnDocument: 'after' } // Trả về document sau khi update
         );
+        this.createVoteNotification(user_id, target_id, target_type, type);
         return updatedVote;
       }
     } else {
@@ -50,10 +112,10 @@ class VotesService {
 
       const insertResult = await databaseService.votes.insertOne(newVote);
       if (insertResult.acknowledged) {
+        this.createVoteNotification(user_id, target_id, target_type, type);
         return newVote;
       }
-
-      return null; // Trả về null nếu insert thất bại
+      return null;
     }
   }
 }

@@ -16,6 +16,7 @@ import likesRouter from './routes/likes.routes';
 import postsRouter from './routes/posts.routes';
 import commentsRouter from './routes/comments.routes';
 import questionsRouter from './routes/questions.routes';
+import notificationsRouter from './routes/notifications.routes';
 //import '~/utils/faker';
 config();
 
@@ -40,6 +41,7 @@ app.use('/bookmarks', bookmarksRouter);
 app.use('/conversations', conversationsRouter);
 app.use('/study-groups/:group_id/questions', questionsRouter);
 app.use('/study-groups', studyGroupRouter);
+app.use('/notifications', notificationsRouter);
 
 //ERROR HANDLER
 app.use(defaultErrorHandler);

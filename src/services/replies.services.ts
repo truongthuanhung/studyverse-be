@@ -4,7 +4,8 @@ import Reply from '~/models/schemas/Reply.schema';
 import { ObjectId } from 'mongodb';
 import { ErrorWithStatus } from '~/models/Errors';
 import HTTP_STATUS from '~/constants/httpStatus';
-import { EditQuestionRequestBody } from '~/models/requests/Question.requests';
+import { NotificationType, VoteType } from '~/constants/enums';
+import notificationsService from './notifications.services';
 
 class RepliesService {
   async checkReplyExists(reply_id: string) {
@@ -97,7 +98,28 @@ class RepliesService {
       ])
       .toArray();
 
-    return reply;
+    // Get the question to get group_id
+    const question = await databaseService.questions.findOne({
+      _id: new ObjectId(question_id)
+    });
+
+    if (question && question.user_id.toString() !== user_id) {
+      notificationsService.createNotification({
+        user_id: question.user_id.toString(), // Người nhận thông báo - author của question
+        actor_id: user_id, // Người tạo reply
+        reference_id: question_id,
+        type: NotificationType.Group,
+        content: `replied to your question`,
+        target_url: `/groups/${question.group_id}/questions/${question_id}?replyId=${reply._id}`
+      });
+    }
+
+    return {
+      ...reply,
+      upvotes: 0,
+      downvotes: 0,
+      user_vote: null
+    };
   }
 
   async editReply(reply_id: string, payload: EditReplyRequestBody) {
@@ -175,10 +197,12 @@ class RepliesService {
 
   async getRepliesByQuestionId({
     question_id,
+    user_id,
     page = 1,
     limit = 10
   }: {
     question_id: string;
+    user_id: string;
     page?: number;
     limit?: number;
   }) {
@@ -212,9 +236,99 @@ class RepliesService {
               as: 'user_info'
             }
           },
+          { $unwind: '$user_info' },
+
+          // Lấy số lượng upvotes và downvotes cho mỗi reply
           {
-            $unwind: '$user_info'
+            $lookup: {
+              from: 'votes',
+              let: { replyId: '$_id' },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: { $eq: ['$target_id', '$$replyId'] }
+                  }
+                },
+                {
+                  $group: {
+                    _id: '$type',
+                    count: { $sum: 1 }
+                  }
+                }
+              ],
+              as: 'votes'
+            }
           },
+          {
+            $addFields: {
+              upvotes: {
+                $ifNull: [
+                  {
+                    $arrayElemAt: [
+                      {
+                        $filter: {
+                          input: '$votes',
+                          as: 'vote',
+                          cond: { $eq: ['$$vote._id', VoteType.Upvote] }
+                        }
+                      },
+                      0
+                    ]
+                  },
+                  { count: 0 }
+                ]
+              },
+              downvotes: {
+                $ifNull: [
+                  {
+                    $arrayElemAt: [
+                      {
+                        $filter: {
+                          input: '$votes',
+                          as: 'vote',
+                          cond: { $eq: ['$$vote._id', VoteType.Downvote] }
+                        }
+                      },
+                      0
+                    ]
+                  },
+                  { count: 0 }
+                ]
+              }
+            }
+          },
+
+          // Kiểm tra trạng thái vote của người dùng hiện tại
+          {
+            $lookup: {
+              from: 'votes',
+              let: { replyId: '$_id', userId: new ObjectId(user_id) },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: {
+                      $and: [{ $eq: ['$target_id', '$$replyId'] }, { $eq: ['$user_id', '$$userId'] }]
+                    }
+                  }
+                },
+                {
+                  $project: {
+                    _id: 0,
+                    type: 1
+                  }
+                }
+              ],
+              as: 'user_vote'
+            }
+          },
+          {
+            $addFields: {
+              user_vote: {
+                $ifNull: [{ $arrayElemAt: ['$user_vote.type', 0] }, null]
+              }
+            }
+          },
+
           {
             $project: {
               _id: 1,
@@ -224,7 +338,10 @@ class RepliesService {
               parent_id: 1,
               created_at: 1,
               updated_at: 1,
-              user_info: 1
+              user_info: 1,
+              upvotes: 1,
+              downvotes: 1,
+              user_vote: 1
             }
           },
           {
@@ -246,11 +363,166 @@ class RepliesService {
     const total_pages = Math.ceil(total / limit);
 
     return {
-      replies: result,
+      replies: result.map((r) => ({
+        ...r,
+        upvotes: r.upvotes.count,
+        downvotes: r.downvotes.count,
+        user_vote: r.user_vote
+      })),
       total,
       page,
       limit,
       total_pages
+    };
+  }
+
+  async getReplyById({ reply_id, user_id }: { reply_id: string; user_id: string }) {
+    const result = await databaseService.replies
+      .aggregate([
+        {
+          $match: {
+            _id: new ObjectId(reply_id)
+          }
+        },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'user_id',
+            foreignField: '_id',
+            pipeline: [
+              {
+                $project: {
+                  _id: 1,
+                  name: 1,
+                  username: 1,
+                  avatar: 1
+                }
+              }
+            ],
+            as: 'user_info'
+          }
+        },
+        { $unwind: '$user_info' },
+
+        // Lấy số lượng upvotes và downvotes
+        {
+          $lookup: {
+            from: 'votes',
+            let: { replyId: '$_id' },
+            pipeline: [
+              {
+                $match: {
+                  $expr: { $eq: ['$target_id', '$$replyId'] }
+                }
+              },
+              {
+                $group: {
+                  _id: '$type',
+                  count: { $sum: 1 }
+                }
+              }
+            ],
+            as: 'votes'
+          }
+        },
+        {
+          $addFields: {
+            upvotes: {
+              $ifNull: [
+                {
+                  $arrayElemAt: [
+                    {
+                      $filter: {
+                        input: '$votes',
+                        as: 'vote',
+                        cond: { $eq: ['$$vote._id', VoteType.Upvote] }
+                      }
+                    },
+                    0
+                  ]
+                },
+                { count: 0 }
+              ]
+            },
+            downvotes: {
+              $ifNull: [
+                {
+                  $arrayElemAt: [
+                    {
+                      $filter: {
+                        input: '$votes',
+                        as: 'vote',
+                        cond: { $eq: ['$$vote._id', VoteType.Downvote] }
+                      }
+                    },
+                    0
+                  ]
+                },
+                { count: 0 }
+              ]
+            }
+          }
+        },
+
+        // Kiểm tra trạng thái vote của người dùng hiện tại
+        {
+          $lookup: {
+            from: 'votes',
+            let: { replyId: '$_id', userId: new ObjectId(user_id) },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [{ $eq: ['$target_id', '$$replyId'] }, { $eq: ['$user_id', '$$userId'] }]
+                  }
+                }
+              },
+              {
+                $project: {
+                  _id: 0,
+                  type: 1
+                }
+              }
+            ],
+            as: 'user_vote'
+          }
+        },
+        {
+          $addFields: {
+            user_vote: {
+              $ifNull: [{ $arrayElemAt: ['$user_vote.type', 0] }, null]
+            }
+          }
+        },
+
+        {
+          $project: {
+            _id: 1,
+            content: 1,
+            question_id: 1,
+            medias: 1,
+            parent_id: 1,
+            created_at: 1,
+            updated_at: 1,
+            user_info: 1,
+            upvotes: 1,
+            downvotes: 1,
+            user_vote: 1
+          }
+        }
+      ])
+      .toArray();
+
+    if (result.length === 0) {
+      throw new ErrorWithStatus({ status: HTTP_STATUS.NOT_FOUND, message: 'Reply not found' });
+    }
+
+    const reply = result[0];
+    return {
+      ...reply,
+      upvotes: reply.upvotes.count,
+      downvotes: reply.downvotes.count,
+      user_vote: reply.user_vote
     };
   }
 

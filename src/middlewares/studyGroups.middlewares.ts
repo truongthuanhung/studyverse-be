@@ -10,6 +10,8 @@ import databaseService from '~/services/database.services';
 import { ObjectId } from 'mongodb';
 import { numberEnumToArray } from '~/utils/common';
 import Question from '~/models/schemas/Question.schema';
+import StudyGroupMember from '~/models/schemas/StudyGroupMember.schema';
+import QUESTION_MESSAGES from '~/constants/questionMessages';
 
 const memberTypes = numberEnumToArray(StudyGroupRole);
 
@@ -212,6 +214,28 @@ export const questionOwnerValidator = async (req: Request, res: Response, next: 
   }
 };
 
+export const deleteQuestionValidator = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { role } = req.member as StudyGroupMember;
+    if (role === StudyGroupRole.Admin) {
+      return next();
+    }
+    const question = req.question as Question;
+    const { user_id } = req.decoded_authorization as TokenPayload;
+    if (!question || question.user_id.toString() !== user_id) {
+      return next(
+        new ErrorWithStatus({
+          message: 'User has no permission on this question',
+          status: HTTP_STATUS.FORBIDDEN
+        })
+      );
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const joinRequestValidator = validate(
   checkSchema(
     {
@@ -230,8 +254,6 @@ export const joinRequestValidator = validate(
                 status: HTTP_STATUS.NOT_FOUND
               });
             }
-            console.log('join_request', join_request);
-            console.log(req.study_group);
             if (!join_request.group_id.equals((req as Request).study_group?._id)) {
               throw new ErrorWithStatus({
                 message: 'Invalid join request',
@@ -248,23 +270,41 @@ export const joinRequestValidator = validate(
 );
 
 export const groupAdminValidator = async (req: Request, res: Response, next: NextFunction) => {
-  const { user_id } = req.decoded_authorization as TokenPayload;
-  const { group_id } = req.params;
-  const adminMember = await databaseService.study_group_members.findOne({
-    user_id: new ObjectId(user_id),
-    group_id: new ObjectId(group_id),
-    role: StudyGroupRole.Admin
-  });
+  try {
+    const { user_id } = req.decoded_authorization as TokenPayload;
+    const { group_id } = req.params;
+    const adminMember = await databaseService.study_group_members.findOne({
+      user_id: new ObjectId(user_id),
+      group_id: new ObjectId(group_id),
+      role: StudyGroupRole.Admin
+    });
 
-  if (!adminMember) {
-    next(
-      new ErrorWithStatus({
-        status: HTTP_STATUS.FORBIDDEN,
-        message: 'User has no permission on this group'
-      })
-    );
+    if (!adminMember) {
+      next(
+        new ErrorWithStatus({
+          status: HTTP_STATUS.FORBIDDEN,
+          message: 'User has no permission on this group'
+        })
+      );
+    }
+    next();
+  } catch (err) {
+    next(err);
   }
-  next();
+};
+
+export const adminValidator = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (req.member?.role === StudyGroupRole.Admin) {
+      return next();
+    }
+    throw new ErrorWithStatus({
+      status: HTTP_STATUS.FORBIDDEN,
+      message: QUESTION_MESSAGES.FORBIDDEN
+    });
+  } catch (err) {
+    next(err);
+  }
 };
 
 export const groupMemberValidator = async (req: Request, res: Response, next: NextFunction) => {
@@ -312,9 +352,9 @@ export const createQuestionValidator = validate(
         isLength: {
           options: {
             min: 1,
-            max: 100
+            max: 1000
           },
-          errorMessage: 'Title must be from 1 to 100 characters long'
+          errorMessage: 'Title must be from 1 to 1000 characters long'
         },
         trim: true
       },
@@ -441,6 +481,42 @@ export const editQuestionValidator = validate(
   )
 );
 
+export const validateGroupMembership = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { group_id } = req.params;
+    const { user_id } = req.decoded_authorization as TokenPayload;
+
+    const [group, member] = await Promise.all([
+      databaseService.study_groups.findOne({ _id: new ObjectId(group_id) }),
+      databaseService.study_group_members.findOne({
+        user_id: new ObjectId(user_id),
+        group_id: new ObjectId(group_id)
+      })
+    ]);
+
+    if (!group) {
+      throw new ErrorWithStatus({
+        message: 'Study group not found',
+        status: HTTP_STATUS.NOT_FOUND
+      });
+    }
+
+    if (!member) {
+      throw new ErrorWithStatus({
+        status: HTTP_STATUS.FORBIDDEN,
+        message: 'User has no permission on this group'
+      });
+    }
+
+    req.study_group = group;
+    req.member = member;
+
+    next();
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const validateGroupQuestionAndMembership = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { group_id, question_id } = req.params;
@@ -496,7 +572,7 @@ export const validateGroupQuestionAndMembership = async (req: Request, res: Resp
     // Lưu các đối tượng vào request để sử dụng ở controller
     req.study_group = group;
     req.question = question;
-
+    req.member = member;
     next();
   } catch (err) {
     next(err);

@@ -1,5 +1,10 @@
 import { Router } from 'express';
 import {
+  getFollowersController,
+  getFollowingsController,
+  getFriendsController
+} from '~/controllers/relationships.controllers';
+import {
   changePasswordController,
   emailVerifyController,
   followController,
@@ -18,7 +23,7 @@ import {
   updateMeController,
   verifyForgotPasswordController
 } from '~/controllers/users.controllers';
-import { filterMiddleware } from '~/middlewares/common.middlewares';
+import { filterMiddleware, paginationValidator } from '~/middlewares/common.middlewares';
 import {
   accessTokenValidator,
   changePasswordValidator,
@@ -150,6 +155,10 @@ usersRouter.patch(
  * Method: GET
  */
 usersRouter.get('/follow-stats', accessTokenValidator, wrapRequestHandler(getFollowStatsController));
+
+usersRouter.get('/friends', accessTokenValidator, paginationValidator, wrapRequestHandler(getFriendsController));
+usersRouter.get('/followers', accessTokenValidator, paginationValidator, wrapRequestHandler(getFollowersController));
+usersRouter.get('/followings', accessTokenValidator, paginationValidator, wrapRequestHandler(getFollowingsController));
 
 /**
  * Description: Get user profile

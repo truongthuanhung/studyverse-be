@@ -1,6 +1,7 @@
 import { Request } from 'express';
 import { checkSchema } from 'express-validator';
 import { ObjectId } from 'mongodb';
+import { VoteType } from '~/constants/enums';
 import HTTP_STATUS from '~/constants/httpStatus';
 import { ErrorWithStatus } from '~/models/Errors';
 import Question from '~/models/schemas/Question.schema';
@@ -19,9 +20,9 @@ export const createReplyValidator = validate(
         isLength: {
           options: {
             min: 1,
-            max: 1000
+            max: 10000
           },
-          errorMessage: 'Content must be between 1 and 1000 characters'
+          errorMessage: 'Content must be between 1 and 10000 characters'
         }
       },
       medias: {
@@ -51,12 +52,12 @@ export const createReplyValidator = validate(
             const reply = await databaseService.replies.findOne({
               _id: new ObjectId(value)
             });
-            if (!reply || reply.question_id.toString() !== (req as Request).question?._id || reply.parent_id !== null) {
-              throw new ErrorWithStatus({
-                message: 'Invalid parent id',
-                status: HTTP_STATUS.BAD_REQUEST
-              });
-            }
+            // if (!reply || reply.question_id.toString() !== (req as Request).question?._id || reply.parent_id !== null) {
+            //   throw new ErrorWithStatus({
+            //     message: 'Invalid parent id',
+            //     status: HTTP_STATUS.BAD_REQUEST
+            //   });
+            // }
             return true;
           }
         }
@@ -93,6 +94,35 @@ export const deleteReplyValidator = validate(
             });
           }
         }
+      }
+    }
+  })
+);
+
+export const voteReplyValidator = validate(
+  checkSchema({
+    reply_id: {
+      in: ['params'],
+      isMongoId: {
+        errorMessage: 'Invalid reply id'
+      },
+      custom: {
+        options: async (value: string, { req }) => {
+          const reply = await repliesService.checkReplyExists(value);
+          const question = (req as Request).question as Question;
+          if (!question._id?.equals(reply.question_id)) {
+            throw new ErrorWithStatus({
+              message: 'Invalid reply_id',
+              status: HTTP_STATUS.BAD_REQUEST
+            });
+          }
+        }
+      }
+    },
+    type: {
+      isIn: {
+        options: [[VoteType.Upvote, VoteType.Downvote]],
+        errorMessage: 'Type must be Upvote or Downvote'
       }
     }
   })
@@ -148,6 +178,29 @@ export const editReplyValidator = validate(
             throw new Error('Medias must be an array of string');
           }
           return true;
+        }
+      }
+    }
+  })
+);
+
+export const replyIdValidator = validate(
+  checkSchema({
+    reply_id: {
+      in: ['params'],
+      isMongoId: {
+        errorMessage: 'Invalid reply id'
+      },
+      custom: {
+        options: async (value: string, { req }) => {
+          const reply = await repliesService.checkReplyExists(value);
+          const question = (req as Request).question as Question;
+          if (!question._id?.equals(reply.question_id)) {
+            throw new ErrorWithStatus({
+              message: 'Invalid reply_id',
+              status: HTTP_STATUS.BAD_REQUEST
+            });
+          }
         }
       }
     }

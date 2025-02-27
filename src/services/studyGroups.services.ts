@@ -2,11 +2,13 @@ import databaseService from './database.services';
 import StudyGroup from '~/models/schemas/StudyGroup.schema';
 import { ObjectId } from 'mongodb';
 import StudyGroupMember from '~/models/schemas/StudyGroupMember.schema';
-import { StudyGroupRole } from '~/constants/enums';
+import { NotificationType, StudyGroupRole } from '~/constants/enums';
 import { ErrorWithStatus } from '~/models/Errors';
 import HTTP_STATUS from '~/constants/httpStatus';
 import JoinRequest from '~/models/schemas/JoinRequest.schema';
 import { CreateStudyGroupRequestBody, EditStudyGroupRequestBody } from '~/models/requests/StudyGroup.requests';
+import notificationsService from './notifications.services';
+import { getIO, getUserSocketId } from '~/configs/socket';
 
 class StudyGroupsService {
   async isGroupExists(group_id: string) {
@@ -256,6 +258,33 @@ class StudyGroupsService {
         group_id: new ObjectId(group_id)
       })
     );
+
+    // Create notifications for each admin
+    const io = getIO();
+    const adminMembers = await databaseService.study_group_members
+      .find({
+        group_id: new ObjectId(group_id),
+        role: StudyGroupRole.Admin
+      })
+      .toArray();
+    const notificationPromises = adminMembers.map((admin) => {
+      const notificationBody = {
+        user_id: admin.user_id.toString(),
+        actor_id: user_id,
+        reference_id: result.insertedId.toString(),
+        type: NotificationType.Group,
+        content: `request to join group`,
+        target_url: `/groups/${group_id}/requests?requestId=${result.insertedId}`
+      };
+      const adminSocketId = getUserSocketId(admin.user_id.toString());
+      if (adminSocketId) {
+        io.to(adminSocketId).emit('new_join_request', group_id);
+      }
+      return notificationsService.createNotification(notificationBody);
+    });
+
+    // Send notifications in parallel
+    Promise.all(notificationPromises);
     return result;
   }
 
@@ -280,6 +309,23 @@ class StudyGroupsService {
         status: HTTP_STATUS.BAD_REQUEST
       });
     }
+    // Create notifications for each admin
+    const io = getIO();
+    const adminMembers = await databaseService.study_group_members
+      .find({
+        group_id: new ObjectId(group_id),
+        role: StudyGroupRole.Admin
+      })
+      .toArray();
+    const notificationPromises = adminMembers.map((admin) => {
+      const adminSocketId = getUserSocketId(admin.user_id.toString());
+      if (adminSocketId) {
+        io.to(adminSocketId).emit('cancel_join_request', group_id);
+      }
+    });
+
+    // Send notifications in parallel
+    Promise.all(notificationPromises);
 
     return result;
   }
@@ -412,6 +458,14 @@ class StudyGroupsService {
       .toArray();
 
     return join_requests;
+  }
+
+  async getJoinRequestsCount(group_id: string) {
+    const total = await databaseService.join_requests.countDocuments({
+      group_id: new ObjectId(group_id)
+    });
+
+    return { total };
   }
 
   async getMembers(group_id: string, role?: StudyGroupRole) {

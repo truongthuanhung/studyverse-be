@@ -6,5 +6,6 @@ export interface CreateNotificationBody {
   reference_id: string;
   type: NotificationType;
   content: string;
+  group_id?: string;
   target_url?: string;
 }

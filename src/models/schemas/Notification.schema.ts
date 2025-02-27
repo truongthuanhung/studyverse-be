@@ -9,6 +9,7 @@ interface INotification {
   type: NotificationType;
   content: string;
   status: NotificationStatus;
+  group_id?: ObjectId;
   target_url?: string;
   created_at?: Date;
 }
@@ -21,6 +22,7 @@ export default class Notification {
   type: NotificationType;
   content: string;
   status: NotificationStatus;
+  group_id?: ObjectId;
   target_url?: string;
   created_at: Date;
 
@@ -32,6 +34,7 @@ export default class Notification {
     this.type = notification.type;
     this.content = notification.content;
     this.status = notification.status;
+    this.group_id = notification.group_id;
     this.target_url = notification.target_url;
     this.created_at = notification.created_at || new Date();
   }

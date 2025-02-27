@@ -50,21 +50,11 @@ class QuestionsService {
       })
     );
 
-    const io = getIO();
-
     if (role !== StudyGroupRole.Admin) {
-      // Get all admin members of the group
-      const adminMembers = await databaseService.study_group_members
-        .find({
-          group_id: new ObjectId(group_id),
-          role: StudyGroupRole.Admin
-        })
-        .toArray();
-
-      // Create notifications for each admin
-      const notificationPromises = adminMembers.map((admin) => {
-        const notificationBody = {
-          user_id: admin.user_id.toString(),
+      await notificationsService.emitToAdminGroup({
+        group_id: group_id,
+        event_name: 'new_pending_question',
+        body: {
           actor_id: user_id,
           reference_id: insertedId.toString(),
           type: NotificationType.Group,
@@ -72,16 +62,8 @@ class QuestionsService {
             question.title.length > 10 ? question.title.substring(0, 10) + '...' : question.title
           }`,
           target_url: `/groups/${group_id}/manage-questions?questionId=${insertedId}`
-        };
-        const adminSocketId = getUserSocketId(admin.user_id.toString());
-        if (adminSocketId) {
-          io.to(adminSocketId).emit('new_pending_question', group_id);
         }
-        return notificationsService.createNotification(notificationBody);
       });
-
-      // Send notifications in parallel
-      Promise.all(notificationPromises);
     }
 
     // Get question with additional fields using aggregation

@@ -259,32 +259,19 @@ class StudyGroupsService {
       })
     );
 
-    // Create notifications for each admin
-    const io = getIO();
-    const adminMembers = await databaseService.study_group_members
-      .find({
-        group_id: new ObjectId(group_id),
-        role: StudyGroupRole.Admin
-      })
-      .toArray();
-    const notificationPromises = adminMembers.map((admin) => {
-      const notificationBody = {
-        user_id: admin.user_id.toString(),
+    await notificationsService.emitToAdminGroup({
+      group_id: group_id,
+      event_name: 'new_join_request',
+      body: {
         actor_id: user_id,
         reference_id: result.insertedId.toString(),
         type: NotificationType.Group,
         content: `request to join group`,
-        target_url: `/groups/${group_id}/requests?requestId=${result.insertedId}`
-      };
-      const adminSocketId = getUserSocketId(admin.user_id.toString());
-      if (adminSocketId) {
-        io.to(adminSocketId).emit('new_join_request', group_id);
+        target_url: `/groups/${group_id}/requests?requestId=${result.insertedId}`,
+        group_id
       }
-      return notificationsService.createNotification(notificationBody);
     });
 
-    // Send notifications in parallel
-    Promise.all(notificationPromises);
     return result;
   }
 
@@ -344,19 +331,6 @@ class StudyGroupsService {
 
     const { user_id: request_user_id, group_id } = join_request;
 
-    const adminMember = await databaseService.study_group_members.findOne({
-      user_id: new ObjectId(user_id),
-      group_id: new ObjectId(group_id),
-      role: StudyGroupRole.Admin
-    });
-
-    if (!adminMember) {
-      throw new ErrorWithStatus({
-        status: HTTP_STATUS.FORBIDDEN,
-        message: 'User has no permission to accept request'
-      });
-    }
-
     const session = databaseService.client.startSession();
     try {
       session.startTransaction();
@@ -375,17 +349,20 @@ class StudyGroupsService {
       await databaseService.study_groups.updateOne({ _id: new ObjectId(group_id) }, { $inc: { member: 1 } });
 
       await session.commitTransaction();
-
+      session.endSession();
+      databaseService.notifications.deleteMany({
+        reference_id: new ObjectId(join_request_id),
+        type: NotificationType.Group
+      });
       return { message: 'Join request accepted and user added to the group.' };
     } catch (error) {
       await session.abortTransaction();
+      session.endSession();
       console.error('Error accepting join request:', error);
       throw new ErrorWithStatus({
         status: HTTP_STATUS.INTERNAL_SERVER_ERROR,
         message: 'Failed to accept join request.'
       });
-    } finally {
-      session.endSession();
     }
   }
 
@@ -401,22 +378,13 @@ class StudyGroupsService {
       });
     }
 
-    const { group_id } = join_request;
-    const adminMember = await databaseService.study_group_members.findOne({
-      user_id: new ObjectId(user_id),
-      group_id: new ObjectId(group_id),
-      role: StudyGroupRole.Admin
-    });
-
-    if (!adminMember) {
-      throw new ErrorWithStatus({
-        status: HTTP_STATUS.FORBIDDEN,
-        message: 'User has no permission to decline request'
-      });
-    }
-
     await databaseService.join_requests.findOneAndDelete({
       _id: new ObjectId(join_request_id)
+    });
+
+    databaseService.notifications.deleteMany({
+      reference_id: new ObjectId(join_request_id),
+      type: NotificationType.Group
     });
 
     return { message: 'Join request declined.' };

@@ -98,19 +98,19 @@ class RepliesService {
       ])
       .toArray();
 
-    // Get the question to get group_id
     const question = await databaseService.questions.findOne({
       _id: new ObjectId(question_id)
     });
 
     if (question && question.user_id.toString() !== user_id) {
       notificationsService.createNotification({
-        user_id: question.user_id.toString(), // Người nhận thông báo - author của question
-        actor_id: user_id, // Người tạo reply
+        user_id: question.user_id.toString(),
+        actor_id: user_id,
         reference_id: question_id,
         type: NotificationType.Group,
         content: `replied to your question`,
-        target_url: `/groups/${question.group_id}/questions/${question_id}?replyId=${reply._id}`
+        target_url: `/groups/${question.group_id}/questions/${question_id}?replyId=${reply._id}`,
+        group_id: question.group_id.toString()
       });
     }
 

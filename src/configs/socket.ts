@@ -242,6 +242,11 @@ const initSocket = (httpServer: ServerHttp) => {
       );
       socket.emit('mark_as_read', conversationId);
     });
+
+    socket.on('group_admins', (group_id: string) => {
+      socket.join(`group_admins_${group_id}`);
+    });
+
     socket.on('disconnect', () => {
       delete users[user_id];
       console.log(users);

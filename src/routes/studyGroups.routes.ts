@@ -19,6 +19,7 @@ import {
 } from '~/controllers/studyGroups.controllers';
 import { filterMiddleware } from '~/middlewares/common.middlewares';
 import {
+  adminValidator,
   createQuestionValidator,
   createStudyGroupValidator,
   editQuestionValidator,
@@ -29,7 +30,8 @@ import {
   groupMemberValidator,
   joinRequestValidator,
   questionIdValidator,
-  questionOwnerValidator
+  questionOwnerValidator,
+  validateGroupMembership
 } from '~/middlewares/studyGroups.middlewares';
 import { accessTokenValidator, teacherValidator } from '~/middlewares/users.middlewares';
 import { wrapRequestHandler } from '~/utils/handlers';
@@ -111,8 +113,8 @@ studyGroupRouter.post(
 studyGroupRouter.post(
   '/:group_id/join-requests/:join_request_id/accept',
   accessTokenValidator,
-  groupIdValidator,
-  groupAdminValidator,
+  validateGroupMembership,
+  adminValidator,
   joinRequestValidator,
   wrapRequestHandler(acceptJoinRequestController)
 );
@@ -120,8 +122,8 @@ studyGroupRouter.post(
 studyGroupRouter.post(
   '/:group_id/join-requests/:join_request_id/decline',
   accessTokenValidator,
-  groupIdValidator,
-  groupAdminValidator,
+  validateGroupMembership,
+  adminValidator,
   joinRequestValidator,
   wrapRequestHandler(declineJoinRequestController)
 );

@@ -5,6 +5,7 @@ import HTTP_STATUS from '~/constants/httpStatus';
 import { EditQuestionRequestBody } from '~/models/requests/Question.requests';
 import { TokenPayload } from '~/models/requests/User.requests';
 import { VoteRequestBody } from '~/models/requests/Vote.requests';
+import StudyGroup from '~/models/schemas/StudyGroup.schema';
 import repliesService from '~/services/replies.services';
 import votesService from '~/services/votes.services';
 
@@ -73,12 +74,13 @@ export const editReplyController = async (req: Request, res: Response) => {
 export const voteReplyController = async (req: Request<ParamsDictionary, any, VoteRequestBody>, res: Response) => {
   const { user_id } = req.decoded_authorization as TokenPayload;
   const { reply_id } = req.params;
-
+  const { _id } = req.study_group as StudyGroup;
   const result = await votesService.vote({
     user_id,
     target_type: GroupTargetType.Reply,
     target_id: reply_id,
-    type: req.body.type
+    type: req.body.type,
+    group_id: _id?.toString() as string
   });
 
   return res.json({

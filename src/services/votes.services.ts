@@ -28,12 +28,19 @@ class VotesService {
     }
   }
 
-  private async createVoteNotification(
-    user_id: string,
-    target_id: string,
-    target_type: GroupTargetType,
-    vote_type: VoteType
-  ) {
+  private async createVoteNotification({
+    user_id,
+    target_id,
+    target_type,
+    vote_type,
+    group_id
+  }: {
+    user_id: string;
+    target_id: string;
+    target_type: GroupTargetType;
+    vote_type: VoteType;
+    group_id: string;
+  }) {
     // Lấy thông tin về owner của target (người cần nhận thông báo)
     let target_owner_id;
 
@@ -60,7 +67,8 @@ class VotesService {
         reference_id: target_id,
         type: NotificationType.Group,
         content: `${content} ${target_type === GroupTargetType.Question ? 'your question' : 'your reply'}`,
-        target_url: target_url ?? undefined // Add the target URL to the notification
+        target_url: target_url ?? undefined,
+        group_id
       });
     }
   }
@@ -69,13 +77,16 @@ class VotesService {
     user_id,
     target_id,
     target_type,
-    type
+    type,
+    group_id
   }: {
     user_id: string;
     target_id: string;
     target_type: GroupTargetType;
     type: VoteType;
+    group_id: string;
   }) {
+    console.log(group_id);
     const existingVote = await databaseService.votes.findOne({
       user_id: new ObjectId(user_id),
       target_id: new ObjectId(target_id)
@@ -99,7 +110,7 @@ class VotesService {
           },
           { returnDocument: 'after' } // Trả về document sau khi update
         );
-        this.createVoteNotification(user_id, target_id, target_type, type);
+        this.createVoteNotification({ user_id, target_id, target_type, vote_type: type, group_id });
         return updatedVote;
       }
     } else {
@@ -112,7 +123,7 @@ class VotesService {
 
       const insertResult = await databaseService.votes.insertOne(newVote);
       if (insertResult.acknowledged) {
-        this.createVoteNotification(user_id, target_id, target_type, type);
+        this.createVoteNotification({ user_id, target_id, target_type, vote_type: type, group_id });
         return newVote;
       }
       return null;

@@ -1,7 +1,7 @@
 import { CreateNotificationBody } from '~/models/requests/Notification.requests';
 import databaseService from './database.services';
 import Notification from '~/models/schemas/Notification.schema';
-import { NotificationStatus } from '~/constants/enums';
+import { NotificationStatus, StudyGroupRole } from '~/constants/enums';
 import { ObjectId } from 'mongodb';
 import { getIO, getUserSocketId } from '~/configs/socket';
 import { ErrorWithStatus } from '~/models/Errors';
@@ -24,6 +24,7 @@ class NotificationsService {
         status: NotificationStatus.Unread,
         user_id: new ObjectId(body.user_id),
         actor_id: new ObjectId(body.actor_id),
+        group_id: body.group_id ? new ObjectId(body.group_id) : undefined,
         reference_id: new ObjectId(body.reference_id)
       })
     );
@@ -128,6 +129,20 @@ class NotificationsService {
           }
         },
         {
+          $lookup: {
+            from: 'study_groups',
+            localField: 'group_id',
+            foreignField: '_id',
+            as: 'group'
+          }
+        },
+        {
+          $unwind: {
+            path: '$group',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
           $project: {
             _id: 1,
             user_id: 1,
@@ -137,10 +152,12 @@ class NotificationsService {
             type: 1,
             content: 1,
             status: 1,
+            group_id: 1,
             created_at: 1,
             'actor.name': 1,
             'actor.avatar': 1,
-            'actor.username': 1
+            'actor.username': 1,
+            'group.name': 1
           }
         }
       ])
@@ -204,6 +221,33 @@ class NotificationsService {
       { $set: { status: NotificationStatus.Read } }
     );
     return result.modifiedCount;
+  }
+
+  async emitToAdminGroup({
+    group_id,
+    event_name,
+    body
+  }: {
+    group_id: string;
+    event_name: string;
+    body: Omit<CreateNotificationBody, 'user_id'>;
+  }) {
+    const io = getIO();
+    io.to(`group_${group_id}_admins`).emit(event_name, group_id);
+    const adminMembers = await databaseService.study_group_members
+      .find({
+        group_id: new ObjectId(group_id),
+        role: StudyGroupRole.Admin
+      })
+      .toArray();
+    const notificationPromises = adminMembers.map((admin) => {
+      return notificationsService.createNotification({
+        ...body,
+        user_id: admin.user_id.toString()
+      });
+    });
+
+    Promise.all(notificationPromises);
   }
 }
 

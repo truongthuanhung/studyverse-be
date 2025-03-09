@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 import { ValidationChain, validationResult } from 'express-validator';
 import { RunnableValidationChains } from 'express-validator/lib/middlewares/schema';
 import HTTP_STATUS from '~/constants/httpStatus';
-import USERS_MESSAGES from '~/constants/messages';
+import { USERS_MESSAGES } from '~/constants/messages';
 import { ErrorWithStatus } from '~/models/Errors';
 
 export const validate = (validation: RunnableValidationChains<ValidationChain>) => {

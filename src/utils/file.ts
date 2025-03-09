@@ -18,3 +18,10 @@ export const getExtension = (fullname: string) => {
   const namearr = fullname.split('.');
   return namearr[namearr.length - 1];
 };
+
+// Helper function to extract public ID from Cloudinary URL
+export function extractPublicId(url: string): string | null {
+  const regex = /\/upload\/v\d+\/(.+?)(?:\.[^.]+)?$/;
+  const match = url.match(regex);
+  return match ? match[1] : null;
+}

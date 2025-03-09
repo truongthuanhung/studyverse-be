@@ -1,9 +1,15 @@
 import { Router } from 'express';
 import {
+  getFollowersController,
+  getFollowingsController,
+  getFriendsController
+} from '~/controllers/relationships.controllers';
+import {
   changePasswordController,
   emailVerifyController,
   followController,
   forgotPasswordController,
+  getFollowStatsController,
   getMeController,
   getProfileController,
   getUsersController,
@@ -17,18 +23,16 @@ import {
   updateMeController,
   verifyForgotPasswordController
 } from '~/controllers/users.controllers';
-import { filterMiddleware } from '~/middlewares/common.middlewares';
+import { filterMiddleware, paginationValidator } from '~/middlewares/common.middlewares';
 import {
   accessTokenValidator,
   changePasswordValidator,
   emailVerifyTokenValidator,
-  followValidator,
   forgotPasswordValidator,
   loginValidator,
   refreshTokenValidator,
   registerValidator,
   resetPasswordValidator,
-  unfollowValidator,
   updateMeValidator,
   verifyForgotPasswordValidator
 } from '~/middlewares/users.middlewares';
@@ -144,35 +148,22 @@ usersRouter.patch(
 );
 
 /**
+ * Description: Get follow stats
+ * Path: /follow-stats
+ * Method: GET
+ */
+usersRouter.get('/follow-stats', accessTokenValidator, wrapRequestHandler(getFollowStatsController));
+
+usersRouter.get('/friends', accessTokenValidator, paginationValidator, wrapRequestHandler(getFriendsController));
+usersRouter.get('/followers', accessTokenValidator, paginationValidator, wrapRequestHandler(getFollowersController));
+usersRouter.get('/followings', accessTokenValidator, paginationValidator, wrapRequestHandler(getFollowingsController));
+
+/**
  * Description: Get user profile
  * Path: /:username
  * Method: GET
  */
-usersRouter.get('/:username', wrapRequestHandler(getProfileController));
-
-/**
- * Description: Follow someone
- * Path: /follow
- * Method: POST
- * Header: { Authorization: Bearer <access_token> }
- * Body: { followed_user_id: string }
- */
-usersRouter.post(
-  '/follow',
-  accessTokenValidator,
-  followValidator,
-  filterMiddleware(['followed_user_id']),
-  wrapRequestHandler(followController)
-);
-
-/**
- * Description: Unfollow someone
- * Path: /unfollow
- * Method: POST
- * Header: { Authorization: Bearer <access_token> }
- * Body: { followed_user_id: string }
- */
-usersRouter.post('/unfollow', accessTokenValidator, unfollowValidator, wrapRequestHandler(unfollowController));
+usersRouter.get('/:username', accessTokenValidator, wrapRequestHandler(getProfileController));
 
 /**
  * Description: Change password

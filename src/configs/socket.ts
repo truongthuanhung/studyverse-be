@@ -6,14 +6,21 @@ import Message from '~/models/schemas/Message.schema';
 import { ConversationType } from '~/constants/enums';
 import Conversation from '~/models/schemas/Conversation.schema';
 import { ErrorWithStatus } from '~/models/Errors';
-import USERS_MESSAGES from '~/constants/messages';
 import HTTP_STATUS from '~/constants/httpStatus';
 import { verifyToken } from '~/utils/jwt';
 import { JsonWebTokenError } from 'jsonwebtoken';
 import { verifyAccessToken } from '~/utils/common';
 
+let io: Server;
+
+const users: {
+  [key: string]: {
+    socket_id: string;
+  };
+} = {};
+
 const initSocket = (httpServer: ServerHttp) => {
-  const io = new Server(httpServer, {
+  io = new Server(httpServer, {
     cors: {
       origin: true, // Cho phép tất cả origins
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -21,12 +28,6 @@ const initSocket = (httpServer: ServerHttp) => {
       credentials: false
     }
   });
-
-  const users: {
-    [key: string]: {
-      socket_id: string;
-    };
-  } = {};
 
   // io.use(async (socket, next) => {
   //   const { Authorization } = socket.handshake.auth;
@@ -240,12 +241,28 @@ const initSocket = (httpServer: ServerHttp) => {
       );
       socket.emit('mark_as_read', conversationId);
     });
+
+    socket.on('group_admins', (group_id: string) => {
+      socket.join(`group_admins_${group_id}`);
+    });
+
     socket.on('disconnect', () => {
       delete users[user_id];
       console.log(users);
       console.log(`user ${socket.id} disconnected`);
     });
   });
+};
+
+export const getIO = () => {
+  if (!io) {
+    throw new Error('Socket.io not initialized');
+  }
+  return io;
+};
+
+export const getUserSocketId = (userId: string) => {
+  return users[userId]?.socket_id;
 };
 
 export default initSocket;

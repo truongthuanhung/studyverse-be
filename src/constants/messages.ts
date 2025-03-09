@@ -1,4 +1,4 @@
-const USERS_MESSAGES = {
+export const USERS_MESSAGES = {
   VALIDATION_ERROR: 'Validation error',
   NAME_IS_REQUIRED: 'Name is required',
   NAME_MUST_BE_A_STRING: 'Name must be a string',
@@ -71,7 +71,59 @@ const USERS_MESSAGES = {
   USER_BANNED: 'User is banned',
   CANNOT_FOLLOW_SELF: 'Cannot follow yourself',
   CANNOT_UNFOLLOW_SELF: 'Cannot unfollow yourself',
-  OLD_PASSWORD_MUST_BE_STRING: 'Old password must be string'
+  OLD_PASSWORD_MUST_BE_STRING: 'Old password must be string',
+  NO_PERMISSION_CREATE_GROUP: 'User has no permission to create group'
 } as const;
 
-export default USERS_MESSAGES;
+export const RELATIONSHIP_MESSAGES = {
+  GET_FRIENDS_SUCCESS: 'Get friends successfully',
+  GET_FOLLOWERS_SUCCESS: 'Get followers successfully',
+  GET_FOLLOWINGS_SUCCESS: 'Get followings successfully'
+} as const;
+
+export const STUDY_GROUP_MESSAGES = {
+  GROUP_CREATED: 'Study group has been successfully created.',
+  GROUP_UPDATED: 'Study group details have been updated.',
+  GROUP_DELETED: 'Study group has been deleted.',
+  GROUP_RETRIEVED: 'Study group has been retrieved successfully',
+  MEMBER_ADDED: 'A new member has been added to the study group.',
+  MESSAGE_SENT: 'Your message has been sent successfully.',
+  MESSAGE_FAILED: 'Failed to send the message. Please try again.',
+  JOIN_REQUEST_SENT: 'Your join request has been sent successfully',
+  JOIN_REQUEST_RETRIEVED: 'Join requests have been retrieved successfully',
+  JOIN_REQUEST_COUNT_RETRIEVED: 'Join requests count has been retrieved successfully',
+  JOIN_REQUEST_CANCELED: 'Your join request has been canceled',
+  JOIN_REQUEST_APPROVED: 'Join request has been approved',
+  JOIN_REQUEST_DECLINED: 'Join request has been declined',
+  PERMISSION_DENIED: 'You do not have permission to perform this action.',
+  MEMBER_NOT_FOUND: 'Member is not found',
+  MEMBER_PROMOTED: 'Member has been promoted successfully',
+  MEMBER_DEMOTED: 'Member has been demoted successfully',
+  MEMBER_REMOVED: 'Member has been removed successfully',
+  MEMBERS_RETRIEVED: 'Members have been retrieved successfully',
+  MEMBER_STATS_RETRIEVED: 'Member stats have been retrieved successfully'
+} as const;
+
+export const QUESTION_MESSAGES = {
+  CREATE_SUCCESS: 'The question has been successfully created.',
+  EDIT_SUCCESS: 'The question has been successfully edited.',
+  DELETE_SUCCESS: 'The question has been successfully deleted.',
+  RETRIVE_SUCCESS: 'Retrive successfully',
+  APPROVE_SUCCESS: 'The question has been successfully approved.',
+  REJECT_SUCCESS: 'The question has been rejected.',
+  NOT_FOUND: 'The question was not found.',
+  FORBIDDEN: 'You do not have permission to perform this action.',
+  ALREADY_APPROVED: 'This question has already been approved.',
+  ALREADY_REJECTED: 'This question has already been rejected.',
+  INVALID_REJECTED: 'You cannot reject this question.'
+} as const;
+
+export const NOTIFICATION_MESSAGES = {
+  RETRIVE_SUCCESS: 'Retrieve notifications successfully',
+  GET_UNREAD_SUCCESS: 'Get unread count successfully',
+  MARK_AS_READ_SUCCESS: 'Notification marked as read successfully',
+  READ_SUCCESS: 'Read notification successfully',
+  DELETE_SUCCESS: 'Notification deleted successfully',
+  NOT_FOUND: 'Notification not found',
+  INVALID_ID: 'Invalid mongo id'
+} as const;

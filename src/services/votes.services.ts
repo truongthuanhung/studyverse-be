@@ -3,130 +3,109 @@ import { ObjectId } from 'mongodb';
 import Vote from '~/models/schemas/Vote.schema';
 import { GroupTargetType, NotificationType, VoteType } from '~/constants/enums';
 import notificationsService from './notifications.services';
+import studyGroupsService from './studyGroups.services';
+import { POINTS } from '~/constants/points';
 
 class VotesService {
-  private async getTargetUrl(target_id: string, target_type: GroupTargetType): Promise<string | null> {
-    try {
-      if (target_type === GroupTargetType.Question) {
-        const question = await databaseService.questions.findOne({ _id: new ObjectId(target_id) });
-        if (question) {
-          return `/groups/${question.group_id}/questions/${question._id}`;
-        }
-      } else if (target_type === GroupTargetType.Reply) {
-        const reply = await databaseService.replies.findOne({ _id: new ObjectId(target_id) });
-        if (reply) {
-          const question = await databaseService.questions.findOne({ _id: reply.question_id });
-          if (question) {
-            return `/groups/${question.group_id}/questions/${question._id}?replyId=${reply._id}`;
-          }
-        }
-      }
-      return null;
-    } catch (error) {
-      console.error('Error building target URL:', error);
-      return null;
-    }
-  }
-
-  private async createVoteNotification({
-    user_id,
-    target_id,
-    target_type,
-    vote_type,
-    group_id
-  }: {
-    user_id: string;
-    target_id: string;
-    target_type: GroupTargetType;
-    vote_type: VoteType;
-    group_id: string;
-  }) {
-    // Lấy thông tin về owner của target (người cần nhận thông báo)
-    let target_owner_id;
-
-    if (target_type === GroupTargetType.Question) {
-      const question = await databaseService.questions.findOne({ _id: new ObjectId(target_id) });
-      if (question) {
-        target_owner_id = question.user_id.toString();
-      }
-    } else if (target_type === GroupTargetType.Reply) {
-      const reply = await databaseService.replies.findOne({ _id: new ObjectId(target_id) });
-      if (reply) {
-        target_owner_id = reply.user_id.toString();
-      }
-    }
-
-    // Nếu người vote không phải là owner của target
-    if (target_owner_id && target_owner_id !== user_id) {
-      const content = vote_type === VoteType.Upvote ? 'has upvoted' : 'has downvoted';
-      const target_url = await this.getTargetUrl(target_id, target_type);
-
-      await notificationsService.createNotification({
-        user_id: target_owner_id,
-        actor_id: user_id,
-        reference_id: target_id,
-        type: NotificationType.Group,
-        content: `${content} ${target_type === GroupTargetType.Question ? 'your question' : 'your reply'}`,
-        target_url: target_url ?? undefined,
-        group_id
-      });
-    }
-  }
-
   async vote({
     user_id,
     target_id,
     target_type,
     type,
+    target_url,
+    target_owner_id,
     group_id
   }: {
     user_id: string;
     target_id: string;
     target_type: GroupTargetType;
     type: VoteType;
+    target_url: string;
+    target_owner_id: string;
     group_id: string;
   }) {
-    console.log(group_id);
-    const existingVote = await databaseService.votes.findOne({
-      user_id: new ObjectId(user_id),
-      target_id: new ObjectId(target_id)
-    });
+    const session = databaseService.client.startSession();
+    try {
+      await session.withTransaction(async () => {
+        const userObjectId = new ObjectId(user_id);
+        const targetObjectId = new ObjectId(target_id);
 
-    if (existingVote) {
-      if (existingVote.type === type) {
-        await databaseService.votes.deleteOne({
-          user_id: new ObjectId(user_id),
-          target_id: new ObjectId(target_id)
-        });
-        return null; // Unvote → Trả về null vì không còn vote
-      } else {
-        const updatedVote = await databaseService.votes.findOneAndUpdate(
-          {
-            user_id: new ObjectId(user_id),
-            target_id: new ObjectId(target_id)
-          },
-          {
-            $set: { type }
-          },
-          { returnDocument: 'after' } // Trả về document sau khi update
+        // Lấy thông tin vote hiện tại & target_owner_id
+        const existingVote = await databaseService.votes.findOne(
+          { user_id: userObjectId, target_id: targetObjectId },
+          { session }
         );
-        this.createVoteNotification({ user_id, target_id, target_type, vote_type: type, group_id });
-        return updatedVote;
-      }
-    } else {
-      const newVote = new Vote({
-        user_id: new ObjectId(user_id),
-        target_id: new ObjectId(target_id),
-        type,
-        target_type
-      });
 
-      const insertResult = await databaseService.votes.insertOne(newVote);
-      if (insertResult.acknowledged) {
-        this.createVoteNotification({ user_id, target_id, target_type, vote_type: type, group_id });
-        return newVote;
-      }
-      return null;
+        let pointsToAdd = 0;
+        let voteOperation;
+
+        if (existingVote) {
+          if (existingVote.type === type) {
+            // Xóa vote nếu người dùng chọn lại cùng loại (undo vote)
+            await databaseService.votes.deleteOne({ user_id: userObjectId, target_id: targetObjectId }, { session });
+
+            // Chỉ trừ điểm nếu đang hủy upvote, downvote thì không ảnh hưởng
+            pointsToAdd = existingVote.type === VoteType.Upvote ? -POINTS.UPVOTE_RECEIVED : 0;
+            voteOperation = null;
+          } else {
+            // Cập nhật nếu loại vote khác nhau
+            voteOperation = await databaseService.votes.findOneAndUpdate(
+              { user_id: userObjectId, target_id: targetObjectId },
+              { $set: { type } },
+              { returnDocument: 'after', session }
+            );
+
+            // Nếu đổi từ upvote → downvote: Trừ điểm, ngược lại thì cộng điểm
+            pointsToAdd = existingVote.type === VoteType.Upvote ? -POINTS.UPVOTE_RECEIVED : POINTS.UPVOTE_RECEIVED;
+          }
+        } else {
+          // Tạo vote mới
+          const newVote = new Vote({
+            user_id: userObjectId,
+            target_id: targetObjectId,
+            type,
+            target_type
+          });
+
+          const insertResult = await databaseService.votes.insertOne(newVote, { session });
+          if (!insertResult.acknowledged) throw new Error('Insert vote failed');
+
+          // Nếu là upvote thì mới cộng điểm, còn downvote thì giữ nguyên
+          pointsToAdd = type === VoteType.Upvote ? POINTS.UPVOTE_RECEIVED : 0;
+          voteOperation = newVote;
+        }
+
+        // Cập nhật điểm và tạo thông báo (chạy song song)
+        await Promise.all([
+          pointsToAdd !== 0 &&
+            studyGroupsService.addPointsToMember(
+              {
+                user_id: target_owner_id as string,
+                group_id,
+                pointsToAdd
+              },
+              session
+            ),
+          voteOperation &&
+            user_id !== target_owner_id &&
+            notificationsService.createNotification({
+              user_id: target_owner_id,
+              actor_id: user_id,
+              reference_id: target_id,
+              type: NotificationType.Group,
+              content: `has ${type === VoteType.Upvote ? 'upvoted' : 'downvoted'} ${target_type === GroupTargetType.Question ? 'your question' : 'your reply'}`,
+              target_url: target_url ?? undefined,
+              group_id
+            })
+        ]);
+
+        return voteOperation;
+      });
+    } catch (error) {
+      console.error('Vote transaction failed:', error);
+      throw error;
+    } finally {
+      await session.endSession();
     }
   }
 }

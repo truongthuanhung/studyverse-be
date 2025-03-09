@@ -83,3 +83,8 @@ export enum NotificationStatus {
   Unread,
   Read
 }
+
+export enum InvitationStatus {
+  Unread,
+  Read
+}

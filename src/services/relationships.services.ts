@@ -1,7 +1,17 @@
 import { ObjectId } from 'mongodb';
 import databaseService from './database.services';
+import { USERS_MESSAGES } from '~/constants/messages';
+import { Follower } from '~/models/schemas/Follower.schema';
+import { Friend } from '~/models/schemas/Friend.schema';
 
 class RelationshipsService {
+  private sortUserIds(id1: ObjectId, id2: ObjectId): [ObjectId, ObjectId] {
+    if (id1.toString() < id2.toString()) {
+      return [id1, id2];
+    }
+    return [id2, id1];
+  }
+
   async getFriends({ user_id, page = 1, limit = 10 }: { user_id: string; page?: number; limit?: number }) {
     page = Math.max(1, page);
     limit = Math.max(1, Math.min(limit, 100));
@@ -253,6 +263,121 @@ class RelationshipsService {
       })),
       pagination: { total, page, limit, total_pages }
     };
+  }
+
+  async follow(user_id: string, followed_user_id: string) {
+    // Chuyển đổi string ID thành ObjectId
+    const userObjectId = new ObjectId(user_id);
+    const followedUserObjectId = new ObjectId(followed_user_id);
+
+    const session = databaseService.client.startSession();
+
+    try {
+      await session.withTransaction(async () => {
+        // Kiểm tra và thêm follow trong một truy vấn sử dụng findOneAndUpdate
+        // với upsert: false để đảm bảo không tạo bản ghi nếu đã tồn tại
+        const result = await databaseService.followers.findOneAndUpdate(
+          {
+            user_id: userObjectId,
+            followed_user_id: followedUserObjectId
+          },
+          {
+            $setOnInsert: new Follower({
+              _id: new ObjectId(),
+              user_id: userObjectId,
+              followed_user_id: followedUserObjectId
+            })
+          },
+          {
+            upsert: true,
+            returnDocument: 'after',
+            session
+          }
+        );
+
+        // Nếu đây là bản ghi mới (không phải update), kiểm tra follow ngược lại
+        if (result) {
+          // Kiểm tra xem người kia có follow mình không
+          const mutualFollow = await databaseService.followers.findOne(
+            {
+              user_id: followedUserObjectId,
+              followed_user_id: userObjectId
+            },
+            { session }
+          );
+
+          // Nếu có follow lẫn nhau, thêm vào friends
+          if (mutualFollow) {
+            const [smallerId, largerId] = this.sortUserIds(userObjectId, followedUserObjectId);
+
+            // Sử dụng updateOne với upsert: true để tránh truy vấn findOne riêng biệt
+            await databaseService.friends.updateOne(
+              {
+                user_id1: smallerId,
+                user_id2: largerId
+              },
+              {
+                $setOnInsert: new Friend({
+                  _id: new ObjectId(),
+                  user_id1: smallerId,
+                  user_id2: largerId
+                })
+              },
+              {
+                upsert: true,
+                session
+              }
+            );
+          }
+        }
+      });
+
+      return {
+        message: USERS_MESSAGES.FOLLOW_SUCCESSFULLY
+      };
+    } catch (error) {
+      throw new Error('Failed to follow user');
+    } finally {
+      await session.endSession();
+    }
+  }
+
+  async unfollow(user_id: string, unfollowed_user_id: string) {
+    // Chuyển đổi string ID thành ObjectId
+    const userObjectId = new ObjectId(user_id);
+    const unfollowedUserObjectId = new ObjectId(unfollowed_user_id);
+
+    const session = databaseService.client.startSession();
+
+    try {
+      await session.withTransaction(async () => {
+        // Xóa follower record
+        const follower = await databaseService.followers.findOneAndDelete(
+          {
+            user_id: userObjectId,
+            followed_user_id: unfollowedUserObjectId
+          },
+          { session }
+        );
+        if (follower) {
+          const [smallerId, largerId] = this.sortUserIds(userObjectId, unfollowedUserObjectId);
+          await databaseService.friends.findOneAndDelete(
+            {
+              user_id1: smallerId,
+              user_id2: largerId
+            },
+            { session }
+          );
+        }
+      });
+      return {
+        message: USERS_MESSAGES.UNFOLLOW_SUCCESSFULLY
+      };
+    } catch (error) {
+      throw new Error('Failed to unfollow user');
+    } finally {
+      await session.endSession();
+    }
   }
 }
 

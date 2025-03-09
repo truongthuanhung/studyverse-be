@@ -1,6 +1,6 @@
 import databaseService from './database.services';
 import StudyGroup from '~/models/schemas/StudyGroup.schema';
-import { ObjectId } from 'mongodb';
+import { ClientSession, ObjectId } from 'mongodb';
 import StudyGroupMember from '~/models/schemas/StudyGroupMember.schema';
 import { NotificationType, StudyGroupRole } from '~/constants/enums';
 import { ErrorWithStatus } from '~/models/Errors';
@@ -9,6 +9,8 @@ import JoinRequest from '~/models/schemas/JoinRequest.schema';
 import { CreateStudyGroupRequestBody, EditStudyGroupRequestBody } from '~/models/requests/StudyGroup.requests';
 import notificationsService from './notifications.services';
 import { getIO, getUserSocketId } from '~/configs/socket';
+import badgesService from './badges.services';
+import { STUDY_GROUP_MESSAGES, USERS_MESSAGES } from '~/constants/messages';
 
 class StudyGroupsService {
   async isGroupExists(group_id: string) {
@@ -105,7 +107,19 @@ class StudyGroupsService {
     return group;
   }
 
-  async getStudyGroups(user_id: string, type: string = 'all') {
+  async getStudyGroups({
+    user_id,
+    type = 'all',
+    page,
+    limit
+  }: {
+    user_id: string;
+    type?: string;
+    page: number;
+    limit: number;
+  }) {
+    const skip = (page - 1) * limit;
+
     const matchStage: any = {
       user_id: new ObjectId(user_id)
     };
@@ -126,6 +140,14 @@ class StudyGroupsService {
       },
       { $unwind: '$groupDetails' },
       {
+        $lookup: {
+          from: 'study_group_members',
+          localField: 'group_id',
+          foreignField: 'group_id',
+          as: 'members'
+        }
+      },
+      {
         $project: {
           _id: '$groupDetails._id',
           name: '$groupDetails.name',
@@ -133,12 +155,46 @@ class StudyGroupsService {
           description: '$groupDetails.description',
           cover_photo: '$groupDetails.cover_photo',
           role: '$role',
-          joined_at: '$created_at'
+          joined_at: '$created_at',
+          member_count: { $size: '$members' }
         }
-      }
+      },
+      { $sort: { joined_at: -1 } }, // Sort by joined_at in descending order
+      { $skip: skip },
+      { $limit: limit }
     ];
 
-    return databaseService.study_group_members.aggregate(pipeline).toArray();
+    // Get the study groups with pagination
+    const studyGroups = await databaseService.study_group_members.aggregate(pipeline).toArray();
+
+    // Get total count for pagination
+    const countPipeline = [
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: 'study_groups',
+          localField: 'group_id',
+          foreignField: '_id',
+          as: 'groupDetails'
+        }
+      },
+      { $unwind: '$groupDetails' },
+      { $count: 'total' }
+    ];
+
+    const totalResult = await databaseService.study_group_members.aggregate(countPipeline).toArray();
+    const total = totalResult.length > 0 ? totalResult[0].total : 0;
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      study_groups: studyGroups,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages
+      }
+    };
   }
 
   async getStudyGroupById(user_id: string, group_id: string) {
@@ -185,7 +241,7 @@ class StudyGroupsService {
           created_at: 1,
           updated_at: 1,
           role: { $arrayElemAt: ['$userRole.role', 0] }, // Get user's role
-          members: { $arrayElemAt: ['$memberInfo.memberCount', 0] } // Get member count
+          member_count: { $arrayElemAt: ['$memberInfo.memberCount', 0] } // Get member count
         }
       }
     ];
@@ -583,6 +639,100 @@ class StudyGroupsService {
     }
 
     return result;
+  }
+
+  async addPointsToMember(
+    {
+      user_id,
+      group_id,
+      pointsToAdd
+    }: {
+      user_id: string;
+      group_id: string;
+      pointsToAdd: number;
+    },
+    session?: ClientSession // Thêm session vào tham số
+  ) {
+    const result = await databaseService.study_group_members.findOneAndUpdate(
+      {
+        user_id: new ObjectId(user_id),
+        group_id: new ObjectId(group_id)
+      },
+      {
+        $inc: { points: pointsToAdd },
+        $currentDate: { updated_at: true }
+      },
+      {
+        returnDocument: 'after',
+        upsert: false,
+        session
+      }
+    );
+
+    if (!result) {
+      throw new ErrorWithStatus({
+        status: HTTP_STATUS.NOT_FOUND,
+        message: STUDY_GROUP_MESSAGES.MEMBER_NOT_FOUND
+      });
+    }
+
+    const updatedMember = new StudyGroupMember(result);
+
+    // Nếu badgesService cũng hỗ trợ session thì truyền vào
+    const newBadges = await badgesService.awardBadgeIfEligible(updatedMember, session);
+
+    return {
+      member: updatedMember,
+      newBadges
+    };
+  }
+
+  async getUserStats({
+    user_id,
+    group_id,
+    current_user_id
+  }: {
+    group_id: string;
+    user_id: string;
+    current_user_id?: string;
+  }) {
+    const userObjectId = new ObjectId(user_id);
+    const groupObjectId = new ObjectId(group_id);
+    const [questionsCount, repliesCount, memberData, userData, followData] = await Promise.all([
+      databaseService.questions.countDocuments({ user_id: userObjectId, group_id: groupObjectId }),
+      databaseService.replies.countDocuments({ user_id: userObjectId }),
+      databaseService.study_group_members.findOne({ user_id: userObjectId, group_id: groupObjectId }),
+      databaseService.users.findOne(
+        { _id: userObjectId },
+        {
+          projection: {
+            _id: 1,
+            username: 1,
+            name: 1,
+            bio: 1
+          }
+        }
+      ),
+      current_user_id !== user_id &&
+        databaseService.followers.findOne({
+          user_id: new ObjectId(current_user_id),
+          followed_user_id: userObjectId
+        })
+    ]);
+    if (!memberData) {
+      throw new ErrorWithStatus({
+        status: HTTP_STATUS.NOT_FOUND,
+        message: USERS_MESSAGES.USER_NOT_FOUND
+      });
+    }
+    return {
+      questionsCount,
+      repliesCount,
+      role: memberData.role,
+      points: memberData.points,
+      userData,
+      isFollow: current_user_id === user_id ? null : Boolean(followData)
+    };
   }
 }
 

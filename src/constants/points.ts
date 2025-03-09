@@ -1,0 +1,6 @@
+export const POINTS = {
+  QUESTION_APPROVED: 5,
+  REPLY_CREATED: 1,
+  ANSWER_ACCEPTED: 10,
+  UPVOTE_RECEIVED: 2
+} as const;

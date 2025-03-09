@@ -7,7 +7,6 @@ interface StudyGroupType {
   privacy: GroupPrivacy;
   user_id: ObjectId;
   description?: string;
-  member?: number;
   cover_photo?: string;
   created_at?: Date;
   updated_at?: Date;

@@ -7,9 +7,10 @@ import { ErrorWithStatus } from '~/models/Errors';
 import HTTP_STATUS from '~/constants/httpStatus';
 import cloudinary from '~/configs/cloudinary';
 import { extractPublicId } from '~/utils/file';
-import QUESTION_MESSAGES from '~/constants/questionMessages';
 import notificationsService from './notifications.services';
-import { getIO, getUserSocketId } from '~/configs/socket';
+import studyGroupsService from './studyGroups.services';
+import { POINTS } from '~/constants/points';
+import { QUESTION_MESSAGES } from '~/constants/messages';
 
 class QuestionsService {
   async checkQuestionExists(question_id: string) {
@@ -50,7 +51,13 @@ class QuestionsService {
       })
     );
 
-    if (role !== StudyGroupRole.Admin) {
+    if (role === StudyGroupRole.Admin) {
+      await studyGroupsService.addPointsToMember({
+        user_id: user_id.toString(),
+        group_id: group_id.toString(),
+        pointsToAdd: POINTS.QUESTION_APPROVED
+      });
+    } else {
       await notificationsService.emitToAdminGroup({
         group_id: group_id,
         event_name: 'new_pending_question',
@@ -61,7 +68,8 @@ class QuestionsService {
           content: `requests to post a question: ${
             question.title.length > 10 ? question.title.substring(0, 10) + '...' : question.title
           }`,
-          target_url: `/groups/${group_id}/manage-questions?questionId=${insertedId}`
+          target_url: `/groups/${group_id}/manage-questions?questionId=${insertedId}`,
+          group_id
         }
       });
     }
@@ -285,6 +293,14 @@ class QuestionsService {
         returnDocument: 'after'
       }
     );
+    if (question) {
+      const { user_id, group_id } = question;
+      await studyGroupsService.addPointsToMember({
+        user_id: user_id.toString(),
+        group_id: group_id.toString(),
+        pointsToAdd: POINTS.QUESTION_APPROVED
+      });
+    }
     return question;
   }
 
@@ -559,6 +575,83 @@ class QuestionsService {
           },
           { $unwind: { path: '$user_info', preserveNullAndEmptyArrays: true } },
 
+          // Lookup user role in this group
+          {
+            $lookup: {
+              from: 'study_group_members',
+              let: { userId: '$user_id', groupId: new ObjectId(group_id) },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: {
+                      $and: [{ $eq: ['$user_id', '$$userId'] }, { $eq: ['$group_id', '$$groupId'] }]
+                    }
+                  }
+                },
+                {
+                  $project: {
+                    _id: 0,
+                    role: 1
+                  }
+                }
+              ],
+              as: 'member_info'
+            }
+          },
+          {
+            $addFields: {
+              'user_info.role': {
+                $ifNull: [{ $arrayElemAt: ['$member_info.role', 0] }, null]
+              }
+            }
+          },
+
+          // Lookup user badges for this group
+          {
+            $lookup: {
+              from: 'user_badges',
+              let: { userId: '$user_id', groupId: new ObjectId(group_id) },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: {
+                      $and: [{ $eq: ['$user_id', '$$userId'] }, { $eq: ['$group_id', '$$groupId'] }]
+                    }
+                  }
+                },
+                // Lookup badge details
+                {
+                  $lookup: {
+                    from: 'badges',
+                    localField: 'badge_id',
+                    foreignField: '_id',
+                    as: 'badge_details'
+                  }
+                },
+                { $unwind: { path: '$badge_details', preserveNullAndEmptyArrays: true } },
+                {
+                  $project: {
+                    _id: 1,
+                    badge_id: 1,
+                    badge_name: '$badge_details.name',
+                    badge_description: '$badge_details.description',
+                    badge_icon_url: '$badge_details.icon_url',
+                    badge_points_required: '$badge_details.points_required',
+                    created_at: 1
+                  }
+                }
+              ],
+              as: 'temp_user_badges'
+            }
+          },
+
+          // Add the badges to user_info
+          {
+            $addFields: {
+              'user_info.badges': '$temp_user_badges'
+            }
+          },
+
           // Count replies
           {
             $lookup: {
@@ -681,7 +774,9 @@ class QuestionsService {
               user_id: 0,
               votes: 0,
               'upvotes._id': 0,
-              'downvotes._id': 0
+              'downvotes._id': 0,
+              temp_user_badges: 0, // Remove the temporary field
+              member_info: 0 // Remove the temporary field
             }
           },
           {

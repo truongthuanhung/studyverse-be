@@ -17,7 +17,12 @@ import postsRouter from './routes/posts.routes';
 import commentsRouter from './routes/comments.routes';
 import questionsRouter from './routes/questions.routes';
 import notificationsRouter from './routes/notifications.routes';
+import recommendationsRouter from './routes/recommendations.routes';
+import relationshipsRouter from './routes/relationships.routes';
+import invitationsRouter from './routes/invitations.routes';
+//import '~/utils/friends_faker';
 //import '~/utils/faker';
+//import '~/utils/invitations_faker';
 config();
 
 const port = process.env.PORT || 3003;
@@ -42,6 +47,9 @@ app.use('/conversations', conversationsRouter);
 app.use('/study-groups/:group_id/questions', questionsRouter);
 app.use('/study-groups', studyGroupRouter);
 app.use('/notifications', notificationsRouter);
+app.use('/recommendations', recommendationsRouter);
+app.use('/relationships', relationshipsRouter);
+app.use('/invitations', invitationsRouter);
 
 //ERROR HANDLER
 app.use(defaultErrorHandler);

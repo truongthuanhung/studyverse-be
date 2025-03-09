@@ -1,7 +1,7 @@
 import { Request } from 'express';
 import { checkSchema } from 'express-validator';
 import HTTP_STATUS from '~/constants/httpStatus';
-import USERS_MESSAGES from '~/constants/messages';
+import { USERS_MESSAGES } from '~/constants/messages';
 import { ErrorWithStatus } from '~/models/Errors';
 import { TokenPayload } from '~/models/requests/User.requests';
 import conversationsService from '~/services/conversations.services';

@@ -73,14 +73,16 @@ export const editReplyController = async (req: Request, res: Response) => {
 
 export const voteReplyController = async (req: Request<ParamsDictionary, any, VoteRequestBody>, res: Response) => {
   const { user_id } = req.decoded_authorization as TokenPayload;
-  const { reply_id } = req.params;
-  const { _id } = req.study_group as StudyGroup;
+  const { reply, study_group, question } = req;
+  const target_owner_id = reply?.user_id.toString() as string;
   const result = await votesService.vote({
     user_id,
     target_type: GroupTargetType.Reply,
-    target_id: reply_id,
+    target_id: reply?._id.toString() as string,
     type: req.body.type,
-    group_id: _id?.toString() as string
+    group_id: study_group?._id?.toString() as string,
+    target_owner_id,
+    target_url: `groups/${study_group?._id}/questions/${question?._id?.toString()}/replies/${reply?._id.toString()}`
   });
 
   return res.json({

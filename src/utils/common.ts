@@ -2,7 +2,7 @@ import { Request } from 'express';
 import { JsonWebTokenError } from 'jsonwebtoken';
 import { capitalize } from 'lodash';
 import HTTP_STATUS from '~/constants/httpStatus';
-import USERS_MESSAGES from '~/constants/messages';
+import { USERS_MESSAGES } from '~/constants/messages';
 import { ErrorWithStatus } from '~/models/Errors';
 import { verifyToken } from '~/utils/jwt';
 import { config } from 'dotenv';

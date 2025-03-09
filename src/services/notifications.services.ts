@@ -6,7 +6,7 @@ import { ObjectId } from 'mongodb';
 import { getIO, getUserSocketId } from '~/configs/socket';
 import { ErrorWithStatus } from '~/models/Errors';
 import HTTP_STATUS from '~/constants/httpStatus';
-import NOTIFICATION_MESSAGES from '~/constants/notificationMessages';
+import { NOTIFICATION_MESSAGES } from '~/constants/messages';
 
 class NotificationsService {
   async getUnreadNotificationsCount(userId: string) {
@@ -18,23 +18,80 @@ class NotificationsService {
   }
 
   async createNotification(body: CreateNotificationBody) {
-    const { insertedId } = await databaseService.notifications.insertOne(
-      new Notification({
-        ...body,
-        status: NotificationStatus.Unread,
-        user_id: new ObjectId(body.user_id),
-        actor_id: new ObjectId(body.actor_id),
-        group_id: body.group_id ? new ObjectId(body.group_id) : undefined,
-        reference_id: new ObjectId(body.reference_id)
-      })
-    );
-    const result = await this.getNotificationById(insertedId.toString());
+    const notification = new Notification({
+      ...body,
+      status: NotificationStatus.Unread,
+      user_id: new ObjectId(body.user_id),
+      actor_id: new ObjectId(body.actor_id),
+      group_id: body.group_id ? new ObjectId(body.group_id) : undefined,
+      reference_id: new ObjectId(body.reference_id)
+    });
+
+    const { insertedId } = await databaseService.notifications.insertOne(notification);
+
+    const result = await databaseService.notifications
+      .aggregate([
+        {
+          $match: { _id: insertedId }
+        },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'actor_id',
+            foreignField: '_id',
+            as: 'actor'
+          }
+        },
+        {
+          $unwind: {
+            path: '$actor',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $lookup: {
+            from: 'study_groups',
+            localField: 'group_id',
+            foreignField: '_id',
+            as: 'group'
+          }
+        },
+        {
+          $unwind: {
+            path: '$group',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $project: {
+            _id: 1,
+            user_id: 1,
+            actor_id: 1,
+            reference_id: 1,
+            target_url: 1,
+            type: 1,
+            content: 1,
+            status: 1,
+            group_id: 1,
+            created_at: 1,
+            'actor.name': 1,
+            'actor.avatar': 1,
+            'actor.username': 1,
+            'group.name': 1
+          }
+        }
+      ])
+      .toArray();
+
+    const newNotification = result[0];
+
     const io = getIO();
     const receiverSocketId = getUserSocketId(body.user_id);
     if (receiverSocketId) {
-      io.to(receiverSocketId).emit('new_notification', result);
+      io.to(receiverSocketId).emit('new_notification', newNotification);
     }
-    return result;
+
+    return newNotification;
   }
 
   async getNotificationById(notification_id: string) {

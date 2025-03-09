@@ -1,5 +1,5 @@
-import { Request, Response, Router } from 'express';
-import { createQuestionController, editQuestionController } from '~/controllers/questions.controllers';
+import { Router } from 'express';
+import { getFriendsToInviteController, inviteFriendsController } from '~/controllers/studyGroupInvitations.controllers';
 import {
   acceptJoinRequestController,
   cancelJoinRequestController,
@@ -7,6 +7,7 @@ import {
   declineJoinRequestController,
   demoteMemberController,
   editStudyGroupController,
+  getGroupUserStatsController,
   getJoinRequestsController,
   getJoinRequestsCountController,
   getMembersController,
@@ -20,17 +21,13 @@ import {
 import { filterMiddleware } from '~/middlewares/common.middlewares';
 import {
   adminValidator,
-  createQuestionValidator,
   createStudyGroupValidator,
-  editQuestionValidator,
   getMembersValidator,
   getStudyGroupsValidator,
   groupAdminValidator,
   groupIdValidator,
-  groupMemberValidator,
+  inviteFriendsValidator,
   joinRequestValidator,
-  questionIdValidator,
-  questionOwnerValidator,
   validateGroupMembership
 } from '~/middlewares/studyGroups.middlewares';
 import { accessTokenValidator, teacherValidator } from '~/middlewares/users.middlewares';
@@ -39,6 +36,12 @@ import { wrapRequestHandler } from '~/utils/handlers';
 const studyGroupRouter = Router();
 
 studyGroupRouter.get('/', accessTokenValidator, getStudyGroupsValidator, wrapRequestHandler(getStudyGroupsController));
+
+studyGroupRouter.get(
+  '/:group_id/users/:user_id/stats',
+  accessTokenValidator,
+  wrapRequestHandler(getGroupUserStatsController)
+);
 
 studyGroupRouter.get(
   '/:group_id',
@@ -126,6 +129,23 @@ studyGroupRouter.post(
   adminValidator,
   joinRequestValidator,
   wrapRequestHandler(declineJoinRequestController)
+);
+
+studyGroupRouter.get(
+  '/:group_id/invite-friends',
+  accessTokenValidator,
+  validateGroupMembership,
+  adminValidator,
+  wrapRequestHandler(getFriendsToInviteController)
+);
+
+studyGroupRouter.post(
+  '/:group_id/invite-friends',
+  accessTokenValidator,
+  validateGroupMembership,
+  adminValidator,
+  inviteFriendsValidator,
+  wrapRequestHandler(inviteFriendsController)
 );
 
 studyGroupRouter.get(

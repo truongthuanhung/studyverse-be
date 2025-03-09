@@ -2,7 +2,7 @@ import { Request } from 'express';
 import { checkSchema } from 'express-validator';
 import { ObjectId } from 'mongodb';
 import HTTP_STATUS from '~/constants/httpStatus';
-import NOTIFICATION_MESSAGES from '~/constants/notificationMessages';
+import { NOTIFICATION_MESSAGES } from '~/constants/messages';
 import { ErrorWithStatus } from '~/models/Errors';
 import { TokenPayload } from '~/models/requests/User.requests';
 import databaseService from '~/services/database.services';

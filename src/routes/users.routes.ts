@@ -28,13 +28,11 @@ import {
   accessTokenValidator,
   changePasswordValidator,
   emailVerifyTokenValidator,
-  followValidator,
   forgotPasswordValidator,
   loginValidator,
   refreshTokenValidator,
   registerValidator,
   resetPasswordValidator,
-  unfollowValidator,
   updateMeValidator,
   verifyForgotPasswordValidator
 } from '~/middlewares/users.middlewares';
@@ -166,30 +164,6 @@ usersRouter.get('/followings', accessTokenValidator, paginationValidator, wrapRe
  * Method: GET
  */
 usersRouter.get('/:username', accessTokenValidator, wrapRequestHandler(getProfileController));
-
-/**
- * Description: Follow someone
- * Path: /follow
- * Method: POST
- * Header: { Authorization: Bearer <access_token> }
- * Body: { followed_user_id: string }
- */
-usersRouter.post(
-  '/follow',
-  accessTokenValidator,
-  followValidator,
-  filterMiddleware(['followed_user_id']),
-  wrapRequestHandler(followController)
-);
-
-/**
- * Description: Unfollow someone
- * Path: /unfollow
- * Method: POST
- * Header: { Authorization: Bearer <access_token> }
- * Body: { followed_user_id: string }
- */
-usersRouter.post('/unfollow', accessTokenValidator, unfollowValidator, wrapRequestHandler(unfollowController));
 
 /**
  * Description: Change password

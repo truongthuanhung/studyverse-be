@@ -13,7 +13,8 @@ import { filterMiddleware } from '~/middlewares/common.middlewares';
 import {
   approveQuestionValidator,
   getQuestionsValidator,
-  rejectQuestionValidator
+  rejectQuestionValidator,
+  voteQuestionValidator
 } from '~/middlewares/questions.middlewares';
 import {
   adminValidator,
@@ -28,8 +29,8 @@ import {
 } from '~/middlewares/studyGroups.middlewares';
 import { accessTokenValidator } from '~/middlewares/users.middlewares';
 import { wrapRequestHandler } from '~/utils/handlers';
-import votesRouter from './votes.routes';
 import repliesRouter from './replies.routes';
+import { voteQuestionController } from '~/controllers/votes.controllers';
 
 const questionsRouter = Router({ mergeParams: true });
 
@@ -94,6 +95,14 @@ questionsRouter.delete(
   wrapRequestHandler(deleteQuestionController)
 );
 
+questionsRouter.post(
+  '/:question_id/votes',
+  accessTokenValidator,
+  validateGroupQuestionAndMembership,
+  voteQuestionValidator,
+  wrapRequestHandler(voteQuestionController)
+);
+
 questionsRouter.get(
   '/:question_id',
   accessTokenValidator,
@@ -101,7 +110,6 @@ questionsRouter.get(
   wrapRequestHandler(getQuestionByIdController)
 );
 
-questionsRouter.use('/:question_id/votes', votesRouter);
 questionsRouter.use('/:question_id/replies', repliesRouter);
 
 export default questionsRouter;

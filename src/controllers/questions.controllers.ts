@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { ParamsDictionary } from 'express-serve-static-core';
 import { QuestionStatus } from '~/constants/enums';
 import HTTP_STATUS from '~/constants/httpStatus';
-import QUESTION_MESSAGES from '~/constants/questionMessages';
+import { QUESTION_MESSAGES } from '~/constants/messages';
 import { ErrorWithStatus } from '~/models/Errors';
 import { CreateQuestionRequestBody, EditQuestionRequestBody } from '~/models/requests/Question.requests';
 import { TokenPayload } from '~/models/requests/User.requests';
@@ -73,7 +73,7 @@ export const getQuestionByIdController = async (req: Request, res: Response) => 
 };
 
 export const getQuestionsByGroupIdController = async (req: Request, res: Response) => {
-  const { group_id } = req.params;
+  const { group_id } = req.params; //?page=1&limit=10
   const { page = '1', limit = '10', sortBy = 'newest', status = '0' } = req.query;
 
   const pageNumber = parseInt(page as string, 10);

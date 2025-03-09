@@ -5,12 +5,14 @@ import Post from './models/schemas/Post.schema';
 import StudyGroup from './models/schemas/StudyGroup.schema';
 import StudyGroupMember from './models/schemas/StudyGroupMember.schema';
 import Question from './models/schemas/Question.schema';
+import Reply from './models/schemas/Reply.schema';
 declare module 'express' {
   interface Request {
     user?: User;
     post?: Post;
     question?: Question;
     study_group?: StudyGroup;
+    reply?: Reply;
     member?: StudyGroupMember;
     decoded_authorization?: TokenPayload;
     decoded_refresh_token?: TokenPayload;

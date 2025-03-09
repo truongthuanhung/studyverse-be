@@ -6,6 +6,8 @@ import { ErrorWithStatus } from '~/models/Errors';
 import HTTP_STATUS from '~/constants/httpStatus';
 import { NotificationType, VoteType } from '~/constants/enums';
 import notificationsService from './notifications.services';
+import studyGroupsService from './studyGroups.services';
+import { POINTS } from '~/constants/points';
 
 class RepliesService {
   async checkReplyExists(reply_id: string) {
@@ -101,6 +103,14 @@ class RepliesService {
     const question = await databaseService.questions.findOne({
       _id: new ObjectId(question_id)
     });
+
+    if (question) {
+      await studyGroupsService.addPointsToMember({
+        user_id: user_id.toString(),
+        group_id: question?.group_id.toString(),
+        pointsToAdd: POINTS.REPLY_CREATED
+      });
+    }
 
     if (question && question.user_id.toString() !== user_id) {
       notificationsService.createNotification({

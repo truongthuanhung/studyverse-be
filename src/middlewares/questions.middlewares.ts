@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 import { checkSchema } from 'express-validator';
 import { GroupTargetType, QuestionStatus, VoteType } from '~/constants/enums';
 import HTTP_STATUS from '~/constants/httpStatus';
-import QUESTION_MESSAGES from '~/constants/questionMessages';
+import { QUESTION_MESSAGES } from '~/constants/messages';
 import { ErrorWithStatus } from '~/models/Errors';
 import { numberEnumToArray } from '~/utils/common';
 import { validate } from '~/utils/validation';

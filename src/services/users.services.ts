@@ -9,7 +9,7 @@ import RefreshToken from '~/models/schemas/RefreshToken.schema';
 import { ObjectId } from 'mongodb';
 import nodemailer from 'nodemailer';
 import { generateForgotPasswordEmail } from '~/utils/mail';
-import USERS_MESSAGES from '~/constants/messages';
+import { USERS_MESSAGES } from '~/constants/messages';
 import { ErrorWithStatus } from '~/models/Errors';
 import axios from 'axios';
 import { Follower } from '~/models/schemas/Follower.schema';
@@ -343,12 +343,11 @@ class UsersService {
   }
 
   async getMe(user_id: string) {
-    // Tìm user dựa trên user_id
     const userObjectId = new ObjectId(user_id);
+
+    // Tìm user
     const user = await databaseService.users.findOne(
-      {
-        _id: userObjectId
-      },
+      { _id: userObjectId },
       {
         projection: {
           password: 0,
@@ -362,61 +361,30 @@ class UsersService {
     );
 
     if (!user) {
-      return null; // Nếu không tìm thấy user
+      return null;
     }
 
-    // Tính toán số lượng followers
+    // Đếm số lượng followers
     const followerCountPromise = databaseService.followers.countDocuments({
       followed_user_id: userObjectId
     });
 
-    // Tính toán số lượng followings
+    // Đếm số lượng followings
     const followingCountPromise = databaseService.followers.countDocuments({
       user_id: userObjectId
     });
 
-    // Tính toán số lượng friends (mutual followers)
-    const friendsCountPromise = databaseService.followers
-      .aggregate([
-        {
-          $match: {
-            user_id: userObjectId
-          }
-        },
-        {
-          $lookup: {
-            from: 'followers',
-            let: { following: '$followed_user_id' },
-            pipeline: [
-              {
-                $match: {
-                  $expr: {
-                    $and: [{ $eq: ['$followed_user_id', userObjectId] }, { $eq: ['$user_id', '$$following'] }]
-                  }
-                }
-              }
-            ],
-            as: 'mutualFollow'
-          }
-        },
-        {
-          $match: {
-            mutualFollow: { $ne: [] }
-          }
-        },
-        {
-          $count: 'friendsCount'
-        }
-      ])
-      .toArray();
+    // Đếm số lượng bạn bè từ collection "friends"
+    const friendsCountPromise = databaseService.friends.countDocuments({
+      $or: [{ user_id1: userObjectId }, { user_id2: userObjectId }]
+    });
 
-    const [followerCount, followingCount, friendsResult] = await Promise.all([
+    // Chạy đồng thời 3 promise
+    const [followerCount, followingCount, friendsCount] = await Promise.all([
       followerCountPromise,
       followingCountPromise,
       friendsCountPromise
     ]);
-
-    const friendsCount = friendsResult.length > 0 ? friendsResult[0].friendsCount : 0;
 
     return {
       ...user,
@@ -464,50 +432,20 @@ class UsersService {
 
     const userObjectId = new ObjectId(user._id);
 
-    // Tính toán số lượng followers
+    // Đếm số lượng followers
     const followerCountPromise = databaseService.followers.countDocuments({
       followed_user_id: userObjectId
     });
 
-    // Tính toán số lượng followings
+    // Đếm số lượng followings
     const followingCountPromise = databaseService.followers.countDocuments({
       user_id: userObjectId
     });
 
-    // Tính toán số lượng friends (mutual followers)
-    const friendsCountPromise = databaseService.followers
-      .aggregate([
-        {
-          $match: {
-            user_id: userObjectId
-          }
-        },
-        {
-          $lookup: {
-            from: 'followers',
-            let: { following: '$followed_user_id' },
-            pipeline: [
-              {
-                $match: {
-                  $expr: {
-                    $and: [{ $eq: ['$followed_user_id', userObjectId] }, { $eq: ['$user_id', '$$following'] }]
-                  }
-                }
-              }
-            ],
-            as: 'mutualFollow'
-          }
-        },
-        {
-          $match: {
-            mutualFollow: { $ne: [] }
-          }
-        },
-        {
-          $count: 'friendsCount'
-        }
-      ])
-      .toArray();
+    // Đếm số lượng bạn bè từ collection "friends"
+    const friendsCountPromise = databaseService.friends.countDocuments({
+      $or: [{ user_id1: userObjectId }, { user_id2: userObjectId }]
+    });
 
     // Kiểm tra xem viewer có follow user này không
     let isFollowedPromise = Promise.resolve(false);
@@ -520,14 +458,13 @@ class UsersService {
         .then((count) => count > 0);
     }
 
-    const [followerCount, followingCount, friendsResult, isFollowed] = await Promise.all([
+    // Chạy đồng thời các promise
+    const [followerCount, followingCount, friendsCount, isFollowed] = await Promise.all([
       followerCountPromise,
       followingCountPromise,
       friendsCountPromise,
       isFollowedPromise
     ]);
-
-    const friendsCount = friendsResult.length > 0 ? friendsResult[0].friendsCount : 0;
 
     return {
       ...user,

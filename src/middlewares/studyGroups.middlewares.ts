@@ -11,7 +11,7 @@ import { ObjectId } from 'mongodb';
 import { numberEnumToArray } from '~/utils/common';
 import Question from '~/models/schemas/Question.schema';
 import StudyGroupMember from '~/models/schemas/StudyGroupMember.schema';
-import QUESTION_MESSAGES from '~/constants/questionMessages';
+import { QUESTION_MESSAGES } from '~/constants/messages';
 
 const memberTypes = numberEnumToArray(StudyGroupRole);
 
@@ -578,3 +578,52 @@ export const validateGroupQuestionAndMembership = async (req: Request, res: Resp
     next(err);
   }
 };
+
+export const inviteFriendsValidator = validate(
+  checkSchema(
+    {
+      invited_user_ids: {
+        in: ['body'],
+        isArray: {
+          errorMessage: 'invited_user_ids must be an array'
+        },
+        custom: {
+          options: async (value, { req }) => {
+            if (!Array.isArray(value)) {
+              throw new Error('invited_user_ids must be an array');
+            }
+
+            // Check if each ID is a valid ObjectId
+            const validObjectIds = [];
+            for (const id of value) {
+              try {
+                if (ObjectId.isValid(id)) {
+                  validObjectIds.push(new ObjectId(id));
+                } else {
+                  throw new Error(`${id} is not a valid ObjectId`);
+                }
+              } catch (error) {
+                throw new Error(`${id} is not a valid ObjectId`);
+              }
+            }
+
+            // Check if each user exists in the database
+            const users = await databaseService.users
+              .find({
+                _id: { $in: validObjectIds }
+              })
+              .toArray();
+
+            if (users.length !== value.length) {
+              throw new Error('One or more users do not exist in the database');
+            }
+
+            return true;
+          },
+          errorMessage: 'Invalid user IDs or users do not exist'
+        }
+      }
+    },
+    ['body']
+  )
+);

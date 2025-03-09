@@ -16,6 +16,10 @@ import Question from '~/models/schemas/Question.schema';
 import Vote from '~/models/schemas/Vote.schema';
 import Reply from '~/models/schemas/Reply.schema';
 import Notification from '~/models/schemas/Notification.schema';
+import Badge from '~/models/schemas/Badge.schema';
+import UserBadge from '~/models/schemas/UserBadge.schema';
+import { Friend } from '~/models/schemas/Friend.schema';
+import StudyGroupInvitation from '~/models/schemas/StudyGroupInvitation.schema';
 
 config();
 const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@studyverse.otnmy.mongodb.net/?retryWrites=true&w=majority&appName=StudyVerse`;
@@ -111,6 +115,18 @@ class DatabaseService {
   }
   get notifications(): Collection<Notification> {
     return this.db.collection('notifications');
+  }
+  get badges(): Collection<Badge> {
+    return this.db.collection('badges');
+  }
+  get user_badges(): Collection<UserBadge> {
+    return this.db.collection('user_badges');
+  }
+  get friends(): Collection<Friend> {
+    return this.db.collection('friends');
+  }
+  get study_group_invitations(): Collection<StudyGroupInvitation> {
+    return this.db.collection('study_group_invitations');
   }
 }
 

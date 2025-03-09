@@ -3,7 +3,7 @@ import { ParamsDictionary } from 'express-serve-static-core';
 import { pick } from 'lodash';
 import { ObjectId } from 'mongodb';
 import HTTP_STATUS from '~/constants/httpStatus';
-import USERS_MESSAGES from '~/constants/messages';
+import { USERS_MESSAGES } from '~/constants/messages';
 import { ErrorWithStatus } from '~/models/Errors';
 import {
   ChangePasswordRequestBody,
@@ -135,7 +135,7 @@ export const resetPasswordController = async (
   return res.json(result);
 };
 
-export const getMeController = async (req: Request, res: Response, next: NextFunction) => {
+export const getMeController = async (req: Request, res: Response) => {
   const { user_id } = req.decoded_authorization as TokenPayload;
   const result = await usersService.getMe(user_id);
   return res.json({

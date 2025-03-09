@@ -6,7 +6,6 @@ import Message from '~/models/schemas/Message.schema';
 import { ConversationType } from '~/constants/enums';
 import Conversation from '~/models/schemas/Conversation.schema';
 import { ErrorWithStatus } from '~/models/Errors';
-import USERS_MESSAGES from '~/constants/messages';
 import HTTP_STATUS from '~/constants/httpStatus';
 import { verifyToken } from '~/utils/jwt';
 import { JsonWebTokenError } from 'jsonwebtoken';

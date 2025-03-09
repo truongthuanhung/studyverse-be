@@ -116,6 +116,7 @@ export const voteReplyValidator = validate(
               status: HTTP_STATUS.BAD_REQUEST
             });
           }
+          req.reply = reply;
         }
       }
     },

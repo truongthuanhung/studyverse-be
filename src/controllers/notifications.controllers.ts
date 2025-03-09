@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { NotificationStatus } from '~/constants/enums';
-import NOTIFICATION_MESSAGES from '~/constants/notificationMessages';
+import { NOTIFICATION_MESSAGES } from '~/constants/messages';
 import { TokenPayload } from '~/models/requests/User.requests';
 import notificationsService from '~/services/notifications.services';
 

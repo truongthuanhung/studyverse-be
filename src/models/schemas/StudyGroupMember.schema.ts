@@ -6,6 +6,7 @@ interface StudyGroupMemberType {
   user_id: ObjectId;
   group_id: ObjectId;
   role: StudyGroupRole;
+  points?: number;
   created_at?: Date;
   updated_at?: Date;
 }
@@ -15,6 +16,7 @@ export default class StudyGroupMember {
   user_id: ObjectId;
   group_id: ObjectId;
   role: StudyGroupRole;
+  points: number;
   created_at: Date;
   updated_at: Date;
 
@@ -24,6 +26,7 @@ export default class StudyGroupMember {
     this.user_id = member.user_id;
     this.group_id = member.group_id;
     this.role = member.role;
+    this.points = member.points || 0;
     this.created_at = member.created_at || date;
     this.updated_at = member.updated_at || date;
   }

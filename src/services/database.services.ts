@@ -128,6 +128,9 @@ class DatabaseService {
   get study_group_invitations(): Collection<StudyGroupInvitation> {
     return this.db.collection('study_group_invitations');
   }
+  get tags(): Collection<any> {
+    return this.db.collection('tags');
+  }
 }
 
 const databaseService = new DatabaseService();

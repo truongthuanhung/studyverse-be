@@ -2,6 +2,8 @@ import axios from 'axios';
 import databaseService from './database.services';
 import Tag from '~/models/schemas/Tag.schema';
 import { ObjectId } from 'mongodb';
+import { ErrorWithStatus } from '~/models/Errors';
+import HTTP_STATUS from '~/constants/httpStatus';
 
 class TagsService {
   async fetchTagsFromWikidata() {
@@ -59,6 +61,42 @@ class TagsService {
       name
     });
     return tag;
+  }
+
+  async getTagById(tag_id: string) {
+    const tag = await databaseService.tags.findOne({
+      _id: new ObjectId(tag_id)
+    });
+    if (!tag) {
+      throw new ErrorWithStatus({
+        status: HTTP_STATUS.NOT_FOUND,
+        message: 'Tag not found'
+      });
+    }
+    return tag;
+  }
+
+  async getTagInGroup(tag_id: string, group_id: string) {
+    const tag = await databaseService.tags.findOne({
+      _id: new ObjectId(tag_id)
+    });
+
+    if (!tag) {
+      throw new ErrorWithStatus({
+        status: HTTP_STATUS.NOT_FOUND,
+        message: 'Tag not found in group'
+      });
+    }
+
+    const questionCount = await databaseService.questions.countDocuments({
+      tags: { $in: [new ObjectId(tag_id)] },
+      group_id: new ObjectId(group_id)
+    });
+
+    return {
+      ...tag,
+      question_count: questionCount
+    };
   }
 
   async searchTagsByGroup(group_id: string, searchQuery: string) {

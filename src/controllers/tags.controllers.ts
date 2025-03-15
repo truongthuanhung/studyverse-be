@@ -16,3 +16,21 @@ export const searchTagsByGroupController = async (req: Request, res: Response) =
   const result = await tagsService.searchTagsByGroup(group_id, q as string);
   return res.json({ message: 'Get tags successfully', result });
 };
+
+export const getTagByIdController = async (req: Request, res: Response) => {
+  const { tag_id } = req.params;
+  const result = await tagsService.getTagById(tag_id);
+  return res.json({
+    message: 'Get tag successfully',
+    result
+  });
+};
+
+export const getTagInGroupController = async (req: Request, res: Response) => {
+  const { group_id, tag_id } = req.params;
+  const result = await tagsService.getTagInGroup(tag_id, group_id);
+  return res.json({
+    message: 'Get tag in group successfully',
+    result
+  });
+};

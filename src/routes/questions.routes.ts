@@ -21,8 +21,6 @@ import {
   createQuestionValidator,
   deleteQuestionValidator,
   editQuestionValidator,
-  groupIdValidator,
-  groupMemberValidator,
   questionOwnerValidator,
   validateGroupMembership,
   validateGroupQuestionAndMembership
@@ -45,8 +43,7 @@ questionsRouter.post(
 questionsRouter.get(
   '/',
   accessTokenValidator,
-  groupIdValidator,
-  groupMemberValidator,
+  validateGroupMembership,
   getQuestionsValidator,
   wrapRequestHandler(getQuestionsByGroupIdController)
 );

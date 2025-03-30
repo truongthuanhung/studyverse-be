@@ -118,6 +118,8 @@ class StudyGroupsService {
     page: number;
     limit: number;
   }) {
+    page = Math.max(1, page);
+    limit = Math.max(1, Math.min(limit, 100));
     const skip = (page - 1) * limit;
 
     const matchStage: any = {
@@ -128,62 +130,53 @@ class StudyGroupsService {
       matchStage.role = type === 'admin' ? StudyGroupRole.Admin : StudyGroupRole.Member;
     }
 
-    const pipeline = [
-      { $match: matchStage },
-      {
-        $lookup: {
-          from: 'study_groups',
-          localField: 'group_id',
-          foreignField: '_id',
-          as: 'groupDetails'
+    const [result] = await databaseService.study_group_members
+      .aggregate([
+        { $match: matchStage },
+        {
+          $lookup: {
+            from: 'study_groups',
+            localField: 'group_id',
+            foreignField: '_id',
+            as: 'groupDetails'
+          }
+        },
+        { $unwind: '$groupDetails' }, // Đặt điều kiện unwind trước facet để đảm bảo đếm chính xác
+        {
+          $facet: {
+            study_groups: [
+              {
+                $lookup: {
+                  from: 'study_group_members',
+                  localField: 'group_id',
+                  foreignField: 'group_id',
+                  as: 'members'
+                }
+              },
+              {
+                $project: {
+                  _id: '$groupDetails._id',
+                  name: '$groupDetails.name',
+                  privacy: '$groupDetails.privacy',
+                  description: '$groupDetails.description',
+                  cover_photo: '$groupDetails.cover_photo',
+                  role: '$role',
+                  joined_at: '$created_at',
+                  member_count: { $size: '$members' }
+                }
+              },
+              { $sort: { joined_at: -1 } },
+              { $skip: skip },
+              { $limit: limit }
+            ],
+            total: [{ $count: 'count' }]
+          }
         }
-      },
-      { $unwind: '$groupDetails' },
-      {
-        $lookup: {
-          from: 'study_group_members',
-          localField: 'group_id',
-          foreignField: 'group_id',
-          as: 'members'
-        }
-      },
-      {
-        $project: {
-          _id: '$groupDetails._id',
-          name: '$groupDetails.name',
-          privacy: '$groupDetails.privacy',
-          description: '$groupDetails.description',
-          cover_photo: '$groupDetails.cover_photo',
-          role: '$role',
-          joined_at: '$created_at',
-          member_count: { $size: '$members' }
-        }
-      },
-      { $sort: { joined_at: -1 } }, // Sort by joined_at in descending order
-      { $skip: skip },
-      { $limit: limit }
-    ];
+      ])
+      .toArray();
 
-    // Get the study groups with pagination
-    const studyGroups = await databaseService.study_group_members.aggregate(pipeline).toArray();
-
-    // Get total count for pagination
-    const countPipeline = [
-      { $match: matchStage },
-      {
-        $lookup: {
-          from: 'study_groups',
-          localField: 'group_id',
-          foreignField: '_id',
-          as: 'groupDetails'
-        }
-      },
-      { $unwind: '$groupDetails' },
-      { $count: 'total' }
-    ];
-
-    const totalResult = await databaseService.study_group_members.aggregate(countPipeline).toArray();
-    const total = totalResult.length > 0 ? totalResult[0].total : 0;
+    const studyGroups = result.study_groups || [];
+    const total = result.total.length > 0 ? result.total[0].count : 0;
     const totalPages = Math.ceil(total / limit);
 
     return {

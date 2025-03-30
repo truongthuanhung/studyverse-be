@@ -148,6 +148,84 @@ class TagsService {
 
     return results;
   }
+
+  async searchTags(searchQuery: string) {
+    if (!searchQuery) {
+      searchQuery = '';
+    }
+    const searchRegex = new RegExp(searchQuery, 'i');
+
+    const results = await databaseService.tags
+      .aggregate([
+        {
+          $match: { name: searchRegex }
+        },
+        { $sort: { created_at: -1 } },
+        { $limit: 5 },
+        {
+          $project: {
+            _id: 1,
+            name: 1,
+            created_at: 1,
+            updated_at: 1
+          }
+        }
+      ])
+      .toArray();
+
+    return results;
+  }
+
+  async increaseGroupTagCount(group_id: string, tag_id: string) {
+    const groupObjectId = new ObjectId(group_id);
+    const tagObjectId = new ObjectId(tag_id);
+    await databaseService.group_tags.findOneAndUpdate(
+      { group_id: groupObjectId, tag_id: tagObjectId },
+      {
+        $inc: { usage_count: 1 },
+        $setOnInsert: { created_at: new Date() },
+        $set: { updated_at: new Date() }
+      },
+      { upsert: true, returnDocument: 'after' }
+    );
+  }
+
+  async getTagsByUsageInGroup(group_id: string, sortOrder: 'asc' | 'desc' = 'desc') {
+    const sortValue = sortOrder === 'desc' ? -1 : 1;
+
+    const topTags = await databaseService.group_tags
+      .aggregate([
+        {
+          $match: { group_id: new ObjectId(group_id) }
+        },
+        {
+          $lookup: {
+            from: 'tags',
+            localField: 'tag_id',
+            foreignField: '_id',
+            as: 'tag_info'
+          }
+        },
+        { $unwind: '$tag_info' },
+        {
+          $sort: { usage_count: sortValue }
+        },
+        {
+          $limit: 5
+        },
+        {
+          $project: {
+            _id: 0,
+            tag_id: 1,
+            tag_name: '$tag_info.name',
+            usage_count: 1
+          }
+        }
+      ])
+      .toArray();
+
+    return topTags;
+  }
 }
 
 const tagsService = new TagsService();

@@ -148,7 +148,11 @@ class PostsService {
   async sharePost(user_id: string, body: SharePostRequestBody) {}
 
   async getMyPosts({ user_id, limit, page }: { user_id: string; limit: number; page: number }) {
-    const posts = await databaseService.posts
+    page = Math.max(1, page);
+    limit = Math.max(1, Math.min(limit, 100));
+    const skip = (page - 1) * limit;
+
+    const [result] = await databaseService.posts
       .aggregate([
         {
           $match: {
@@ -156,110 +160,156 @@ class PostsService {
           }
         },
         {
-          $sort: {
-            created_at: -1
-          }
-        },
-        {
-          $skip: (page - 1) * limit
-        },
-        {
-          $limit: limit
-        },
-        {
-          $lookup: {
-            from: 'users',
-            localField: 'user_id',
-            foreignField: '_id',
-            as: 'user'
-          }
-        },
-        {
-          $lookup: {
-            from: 'users',
-            localField: 'mentions',
-            foreignField: '_id',
-            as: 'mentioned_users'
-          }
-        },
-        {
-          $lookup: {
-            from: 'likes',
-            let: { post_id: '$_id' },
-            pipeline: [
+          $facet: {
+            posts: [
               {
-                $match: {
-                  $expr: {
-                    $eq: ['$target_id', '$$post_id']
+                $sort: {
+                  created_at: -1
+                }
+              },
+              {
+                $skip: skip
+              },
+              {
+                $limit: limit
+              },
+              {
+                $lookup: {
+                  from: 'users',
+                  localField: 'user_id',
+                  foreignField: '_id',
+                  pipeline: [
+                    {
+                      $project: {
+                        _id: 1,
+                        name: 1,
+                        username: 1,
+                        avatar: 1
+                      }
+                    }
+                  ],
+                  as: 'user'
+                }
+              },
+              {
+                $lookup: {
+                  from: 'users',
+                  localField: 'mentions',
+                  foreignField: '_id',
+                  pipeline: [
+                    {
+                      $project: {
+                        _id: 1,
+                        name: 1,
+                        username: 1,
+                        avatar: 1
+                      }
+                    }
+                  ],
+                  as: 'mentioned_users'
+                }
+              },
+              {
+                $lookup: {
+                  from: 'likes',
+                  let: { post_id: '$_id' },
+                  pipeline: [
+                    {
+                      $match: {
+                        $expr: {
+                          $eq: ['$target_id', '$$post_id']
+                        }
+                      }
+                    }
+                  ],
+                  as: 'likes'
+                }
+              },
+              {
+                $lookup: {
+                  from: 'comments',
+                  let: { post_id: '$_id' },
+                  pipeline: [
+                    {
+                      $match: {
+                        $expr: {
+                          $eq: ['$post_id', '$$post_id']
+                        }
+                      }
+                    }
+                  ],
+                  as: 'comments'
+                }
+              },
+              // Lookup tag details
+              {
+                $lookup: {
+                  from: 'tags',
+                  localField: 'tags',
+                  foreignField: '_id',
+                  as: 'tags'
+                }
+              },
+              {
+                $project: {
+                  _id: 1,
+                  content: 1,
+                  type: 1,
+                  privacy: 1,
+                  parent_id: 1,
+                  tags: 1,
+                  medias: 1,
+                  user_views: 1,
+                  created_at: 1,
+                  updated_at: 1,
+                  user_info: {
+                    $let: {
+                      vars: { user: { $arrayElemAt: ['$user', 0] } },
+                      in: {
+                        user_id: '$$user._id',
+                        name: '$$user.name',
+                        username: '$$user.username',
+                        avatar: '$$user.avatar'
+                      }
+                    }
+                  },
+                  mentions: {
+                    $map: {
+                      input: '$mentioned_users',
+                      as: 'mentioned_user',
+                      in: {
+                        user_id: '$$mentioned_user._id',
+                        name: '$$mentioned_user.name',
+                        username: '$$mentioned_user.username',
+                        avatar: '$$mentioned_user.avatar'
+                      }
+                    }
+                  },
+                  like_count: { $size: '$likes' },
+                  comment_count: { $size: '$comments' },
+                  isLiked: {
+                    $in: [new ObjectId(user_id), '$likes.user_id']
                   }
                 }
               }
             ],
-            as: 'likes'
-          }
-        },
-        {
-          $lookup: {
-            from: 'comments',
-            let: { post_id: '$_id' },
-            pipeline: [
-              {
-                $match: {
-                  $expr: {
-                    $eq: ['$post_id', '$$post_id']
-                  }
-                }
-              }
-            ],
-            as: 'comments'
-          }
-        },
-        {
-          $project: {
-            _id: 1,
-            content: 1,
-            type: 1,
-            privacy: 1,
-            parent_id: 1,
-            tags: 1,
-            medias: 1,
-            user_views: 1,
-            created_at: 1,
-            updated_at: 1,
-            user_info: {
-              $let: {
-                vars: { user: { $arrayElemAt: ['$user', 0] } },
-                in: {
-                  user_id: '$$user._id',
-                  name: '$$user.name',
-                  username: '$$user.username',
-                  avatar: '$$user.avatar'
-                }
-              }
-            },
-            mentions: {
-              $map: {
-                input: '$mentioned_users',
-                as: 'mentioned_user',
-                in: {
-                  user_id: '$$mentioned_user._id',
-                  name: '$$mentioned_user.name',
-                  username: '$$mentioned_user.username',
-                  avatar: '$$mentioned_user.avatar'
-                }
-              }
-            },
-            like_count: { $size: '$likes' },
-            comment_count: { $size: '$comments' },
-            isLiked: {
-              $in: [new ObjectId(user_id), '$likes.user_id']
-            }
+            total: [{ $count: 'count' }]
           }
         }
       ])
       .toArray();
 
-    return posts;
+    const posts = result.posts || [];
+    const total = result.total.length > 0 ? result.total[0].count : 0;
+    const total_pages = Math.ceil(total / limit);
+
+    return {
+      posts,
+      total,
+      page,
+      limit,
+      total_pages
+    };
   }
 
   async getPostsByUserId({
@@ -273,6 +323,10 @@ class PostsService {
     page: number;
     viewer_id: string;
   }) {
+    page = Math.max(1, page);
+    limit = Math.max(1, Math.min(limit, 100));
+    const skip = (page - 1) * limit;
+
     const userObjectId = new ObjectId(user_id);
     const viewerObjectId = new ObjectId(viewer_id);
 
@@ -280,7 +334,33 @@ class PostsService {
     const isFriend = await usersService.checkFriends(viewer_id, user_id);
     const isFollower = await usersService.checkFollow(viewer_id, user_id);
 
-    const posts = await databaseService.posts
+    // Build privacy filter
+    const privacyFilter = {
+      $or: [
+        { privacy: PostPrivacy.Public },
+        {
+          $and: [{ privacy: PostPrivacy.Private }, { user_id: userObjectId }, { user_id: viewerObjectId }]
+        },
+        {
+          $and: [
+            { privacy: PostPrivacy.Friends },
+            {
+              $or: [{ user_id: viewerObjectId }, { $expr: { $eq: [true, isFriend] } }]
+            }
+          ]
+        },
+        {
+          $and: [
+            { privacy: PostPrivacy.Follower },
+            {
+              $or: [{ user_id: viewerObjectId }, { $expr: { $eq: [true, isFollower] } }]
+            }
+          ]
+        }
+      ]
+    };
+
+    const [result] = await databaseService.posts
       .aggregate([
         {
           $match: {
@@ -289,139 +369,171 @@ class PostsService {
         },
         {
           // Privacy filter
-          $match: {
-            $or: [
-              { privacy: PostPrivacy.Public },
+          $match: privacyFilter
+        },
+        {
+          $facet: {
+            posts: [
               {
-                $and: [{ privacy: PostPrivacy.Private }, { user_id: userObjectId }, { user_id: viewerObjectId }]
+                $sort: {
+                  created_at: -1
+                }
               },
               {
-                $and: [
-                  { privacy: PostPrivacy.Friends },
-                  {
-                    $or: [{ user_id: viewerObjectId }, { $expr: { $eq: [true, isFriend] } }]
-                  }
-                ]
+                $skip: skip
               },
               {
-                $and: [
-                  { privacy: PostPrivacy.Follower },
-                  {
-                    $or: [{ user_id: viewerObjectId }, { $expr: { $eq: [true, isFollower] } }]
+                $limit: limit
+              },
+              {
+                $lookup: {
+                  from: 'users',
+                  localField: 'user_id',
+                  foreignField: '_id',
+                  pipeline: [
+                    {
+                      $project: {
+                        _id: 1,
+                        name: 1,
+                        username: 1,
+                        avatar: 1
+                      }
+                    }
+                  ],
+                  as: 'user'
+                }
+              },
+              {
+                $lookup: {
+                  from: 'users',
+                  localField: 'mentions',
+                  foreignField: '_id',
+                  pipeline: [
+                    {
+                      $project: {
+                        _id: 1,
+                        name: 1,
+                        username: 1,
+                        avatar: 1
+                      }
+                    }
+                  ],
+                  as: 'mentioned_users'
+                }
+              },
+              {
+                $lookup: {
+                  from: 'likes',
+                  let: { post_id: '$_id' },
+                  pipeline: [
+                    {
+                      $match: {
+                        $expr: {
+                          $eq: ['$target_id', '$$post_id']
+                        }
+                      }
+                    }
+                  ],
+                  as: 'likes'
+                }
+              },
+              {
+                $lookup: {
+                  from: 'comments',
+                  let: { post_id: '$_id' },
+                  pipeline: [
+                    {
+                      $match: {
+                        $expr: {
+                          $eq: ['$post_id', '$$post_id']
+                        }
+                      }
+                    }
+                  ],
+                  as: 'comments'
+                }
+              },
+              // Lookup tag details
+              {
+                $lookup: {
+                  from: 'tags',
+                  localField: 'tags',
+                  foreignField: '_id',
+                  as: 'tags'
+                }
+              },
+              {
+                $project: {
+                  _id: 1,
+                  content: 1,
+                  type: 1,
+                  privacy: 1,
+                  parent_id: 1,
+                  tags: 1,
+                  medias: 1,
+                  user_views: 1,
+                  created_at: 1,
+                  updated_at: 1,
+                  user_info: {
+                    $let: {
+                      vars: { user: { $arrayElemAt: ['$user', 0] } },
+                      in: {
+                        user_id: '$$user._id',
+                        name: '$$user.name',
+                        username: '$$user.username',
+                        avatar: '$$user.avatar'
+                      }
+                    }
+                  },
+                  mentions: {
+                    $map: {
+                      input: '$mentioned_users',
+                      as: 'mentioned_user',
+                      in: {
+                        user_id: '$$mentioned_user._id',
+                        name: '$$mentioned_user.name',
+                        username: '$$mentioned_user.username',
+                        avatar: '$$mentioned_user.avatar'
+                      }
+                    }
+                  },
+                  like_count: { $size: '$likes' },
+                  comment_count: { $size: '$comments' },
+                  isLiked: {
+                    $in: [viewerObjectId, '$likes.user_id']
                   }
-                ]
+                }
               }
+            ],
+            total: [
+              {
+                $match: privacyFilter
+              },
+              { $count: 'count' }
             ]
-          }
-        },
-        {
-          $sort: {
-            created_at: -1
-          }
-        },
-        {
-          $skip: (page - 1) * limit
-        },
-        {
-          $limit: limit
-        },
-        {
-          $lookup: {
-            from: 'users',
-            localField: 'user_id',
-            foreignField: '_id',
-            as: 'user'
-          }
-        },
-        {
-          $lookup: {
-            from: 'users',
-            localField: 'mentions',
-            foreignField: '_id',
-            as: 'mentioned_users'
-          }
-        },
-        {
-          $lookup: {
-            from: 'likes',
-            let: { post_id: '$_id' },
-            pipeline: [
-              {
-                $match: {
-                  $expr: {
-                    $eq: ['$target_id', '$$post_id']
-                  }
-                }
-              }
-            ],
-            as: 'likes'
-          }
-        },
-        {
-          $lookup: {
-            from: 'comments',
-            let: { post_id: '$_id' },
-            pipeline: [
-              {
-                $match: {
-                  $expr: {
-                    $eq: ['$post_id', '$$post_id']
-                  }
-                }
-              }
-            ],
-            as: 'comments'
-          }
-        },
-        {
-          $project: {
-            _id: 1,
-            content: 1,
-            type: 1,
-            privacy: 1,
-            parent_id: 1,
-            tags: 1,
-            medias: 1,
-            user_views: 1,
-            created_at: 1,
-            updated_at: 1,
-            user_info: {
-              $let: {
-                vars: { user: { $arrayElemAt: ['$user', 0] } },
-                in: {
-                  user_id: '$$user._id',
-                  name: '$$user.name',
-                  username: '$$user.username',
-                  avatar: '$$user.avatar'
-                }
-              }
-            },
-            mentions: {
-              $map: {
-                input: '$mentioned_users',
-                as: 'mentioned_user',
-                in: {
-                  user_id: '$$mentioned_user._id',
-                  name: '$$mentioned_user.name',
-                  username: '$$mentioned_user.username',
-                  avatar: '$$mentioned_user.avatar'
-                }
-              }
-            },
-            like_count: { $size: '$likes' },
-            comment_count: { $size: '$comments' },
-            isLiked: {
-              $in: [new ObjectId(viewer_id), '$likes.user_id']
-            }
           }
         }
       ])
       .toArray();
 
-    return posts;
+    const posts = result.posts || [];
+    const total = result.total.length > 0 ? result.total[0].count : 0;
+    const total_pages = Math.ceil(total / limit);
+
+    return {
+      posts,
+      total,
+      page,
+      limit,
+      total_pages
+    };
   }
 
   async getNewFeeds({ user_id, limit, page }: { user_id: string; limit: number; page: number }) {
+    page = Math.max(1, page);
+    limit = Math.max(1, Math.min(limit, 100));
+    const skip = (page - 1) * limit;
+
     const match_user_ids = await databaseService.followers
       .find({
         user_id: new ObjectId(user_id)
@@ -432,7 +544,7 @@ class PostsService {
     // Add user's own id to get their posts too
     followed_user_ids.push(new ObjectId(user_id));
 
-    const posts = await databaseService.posts
+    const [result] = await databaseService.posts
       .aggregate([
         {
           $match: {
@@ -442,110 +554,156 @@ class PostsService {
           }
         },
         {
-          $sort: {
-            created_at: -1
-          }
-        },
-        {
-          $skip: (page - 1) * limit
-        },
-        {
-          $limit: limit
-        },
-        {
-          $lookup: {
-            from: 'users',
-            localField: 'user_id',
-            foreignField: '_id',
-            as: 'user'
-          }
-        },
-        {
-          $lookup: {
-            from: 'users',
-            localField: 'mentions',
-            foreignField: '_id',
-            as: 'mentioned_users'
-          }
-        },
-        {
-          $lookup: {
-            from: 'likes',
-            let: { post_id: '$_id' },
-            pipeline: [
+          $facet: {
+            posts: [
               {
-                $match: {
-                  $expr: {
-                    $eq: ['$target_id', '$$post_id']
+                $sort: {
+                  created_at: -1
+                }
+              },
+              {
+                $skip: skip
+              },
+              {
+                $limit: limit
+              },
+              {
+                $lookup: {
+                  from: 'users',
+                  localField: 'user_id',
+                  foreignField: '_id',
+                  pipeline: [
+                    {
+                      $project: {
+                        _id: 1,
+                        name: 1,
+                        username: 1,
+                        avatar: 1
+                      }
+                    }
+                  ],
+                  as: 'user'
+                }
+              },
+              {
+                $lookup: {
+                  from: 'users',
+                  localField: 'mentions',
+                  foreignField: '_id',
+                  pipeline: [
+                    {
+                      $project: {
+                        _id: 1,
+                        name: 1,
+                        username: 1,
+                        avatar: 1
+                      }
+                    }
+                  ],
+                  as: 'mentioned_users'
+                }
+              },
+              {
+                $lookup: {
+                  from: 'likes',
+                  let: { post_id: '$_id' },
+                  pipeline: [
+                    {
+                      $match: {
+                        $expr: {
+                          $eq: ['$target_id', '$$post_id']
+                        }
+                      }
+                    }
+                  ],
+                  as: 'likes'
+                }
+              },
+              {
+                $lookup: {
+                  from: 'comments',
+                  let: { post_id: '$_id' },
+                  pipeline: [
+                    {
+                      $match: {
+                        $expr: {
+                          $eq: ['$post_id', '$$post_id']
+                        }
+                      }
+                    }
+                  ],
+                  as: 'comments'
+                }
+              },
+              // Lookup tag details
+              {
+                $lookup: {
+                  from: 'tags',
+                  localField: 'tags',
+                  foreignField: '_id',
+                  as: 'tags'
+                }
+              },
+              {
+                $project: {
+                  _id: 1,
+                  content: 1,
+                  type: 1,
+                  privacy: 1,
+                  parent_id: 1,
+                  tags: 1,
+                  medias: 1,
+                  user_views: 1,
+                  created_at: 1,
+                  updated_at: 1,
+                  user_info: {
+                    $let: {
+                      vars: { user: { $arrayElemAt: ['$user', 0] } },
+                      in: {
+                        user_id: '$$user._id',
+                        name: '$$user.name',
+                        username: '$$user.username',
+                        avatar: '$$user.avatar'
+                      }
+                    }
+                  },
+                  mentions: {
+                    $map: {
+                      input: '$mentioned_users',
+                      as: 'mentioned_user',
+                      in: {
+                        user_id: '$$mentioned_user._id',
+                        name: '$$mentioned_user.name',
+                        username: '$$mentioned_user.username',
+                        avatar: '$$mentioned_user.avatar'
+                      }
+                    }
+                  },
+                  like_count: { $size: '$likes' },
+                  comment_count: { $size: '$comments' },
+                  isLiked: {
+                    $in: [new ObjectId(user_id), '$likes.user_id']
                   }
                 }
               }
             ],
-            as: 'likes'
-          }
-        },
-        {
-          $lookup: {
-            from: 'comments',
-            let: { post_id: '$_id' },
-            pipeline: [
-              {
-                $match: {
-                  $expr: {
-                    $eq: ['$post_id', '$$post_id']
-                  }
-                }
-              }
-            ],
-            as: 'comments'
-          }
-        },
-        {
-          $project: {
-            _id: 1,
-            content: 1,
-            type: 1,
-            privacy: 1,
-            parent_id: 1,
-            tags: 1,
-            medias: 1,
-            user_views: 1,
-            created_at: 1,
-            updated_at: 1,
-            user_info: {
-              $let: {
-                vars: { user: { $arrayElemAt: ['$user', 0] } },
-                in: {
-                  user_id: '$$user._id',
-                  name: '$$user.name',
-                  username: '$$user.username',
-                  avatar: '$$user.avatar'
-                }
-              }
-            },
-            mentions: {
-              $map: {
-                input: '$mentioned_users',
-                as: 'mentioned_user',
-                in: {
-                  user_id: '$$mentioned_user._id',
-                  name: '$$mentioned_user.name',
-                  username: '$$mentioned_user.username',
-                  avatar: '$$mentioned_user.avatar'
-                }
-              }
-            },
-            like_count: { $size: '$likes' },
-            comment_count: { $size: '$comments' },
-            isLiked: {
-              $in: [new ObjectId(user_id), '$likes.user_id']
-            }
+            total: [{ $count: 'count' }]
           }
         }
       ])
       .toArray();
 
-    return posts;
+    const posts = result.posts || [];
+    const total = result.total.length > 0 ? result.total[0].count : 0;
+    const total_pages = Math.ceil(total / limit);
+
+    return {
+      posts,
+      total,
+      page,
+      limit,
+      total_pages
+    };
   }
 }
 

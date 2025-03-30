@@ -33,99 +33,73 @@ class RepliesService {
     body: CreateReplyRequestBody;
   }) {
     const { content, medias, parent_id } = body;
-    const result = await databaseService.replies.insertOne(
-      new Reply({
-        content,
-        medias: medias || [],
-        user_id: new ObjectId(user_id),
-        question_id: new ObjectId(question_id),
-        parent_id: parent_id ? new ObjectId(parent_id) : null
-      })
-    );
+    const questionObjectId = new ObjectId(question_id);
+    const userObjectId = new ObjectId(user_id);
 
-    if (!result.insertedId) {
+    // Tạo reply mới
+    const newReply = new Reply({
+      content,
+      medias: medias || [],
+      user_id: userObjectId,
+      question_id: questionObjectId,
+      parent_id: parent_id ? new ObjectId(parent_id) : null
+    });
+
+    // Thực hiện song song:
+    // 1. Lưu reply mới
+    // 2. Cập nhật reply_count trong question và lấy thông tin question
+    const [insertResult, question] = await Promise.all([
+      databaseService.replies.insertOne(newReply),
+      databaseService.questions.findOneAndUpdate(
+        { _id: questionObjectId },
+        { $inc: { reply_count: 1 } },
+        { returnDocument: 'after' }
+      )
+    ]);
+
+    if (!insertResult.insertedId) {
       throw new Error('Failed to create reply');
     }
 
-    const [reply] = await databaseService.replies
-      .aggregate([
-        {
-          $match: { _id: result.insertedId }
-        },
-        {
-          $lookup: {
-            from: 'users',
-            localField: 'user_id',
-            foreignField: '_id',
-            pipeline: [
-              {
-                $project: {
-                  _id: 1,
-                  name: 1,
-                  username: 1,
-                  avatar: 1
-                }
-              }
-            ],
-            as: 'user_info'
-          }
-        },
-        { $unwind: '$user_info' },
-        {
-          $lookup: {
-            from: 'replies',
-            let: { questionId: '$question_id' },
-            pipeline: [{ $match: { $expr: { $eq: ['$question_id', '$$questionId'] } } }, { $count: 'reply_count' }],
-            as: 'reply_count_info'
-          }
-        },
-        {
-          $addFields: {
-            reply_count: { $ifNull: [{ $arrayElemAt: ['$reply_count_info.reply_count', 0] }, 0] }
-          }
-        },
-        {
-          $project: {
-            _id: 1,
-            content: 1,
-            question_id: 1,
-            medias: 1,
-            parent_id: 1,
-            created_at: 1,
-            updated_at: 1,
-            user_info: 1,
-            reply_count: 1
-          }
-        }
-      ])
-      .toArray();
+    // Lấy thông tin user (có thể cache thông tin này nếu cần)
+    const user = await databaseService.users.findOne(
+      { _id: userObjectId },
+      { projection: { _id: 1, name: 1, username: 1, avatar: 1 } }
+    );
 
-    const question = await databaseService.questions.findOne({
-      _id: new ObjectId(question_id)
-    });
-
+    // Thực hiện song song các tác vụ phụ (không cần đợi)
     if (question) {
-      await studyGroupsService.addPointsToMember({
-        user_id: user_id.toString(),
-        group_id: question?.group_id.toString(),
-        pointsToAdd: POINTS.REPLY_CREATED
-      });
-    }
+      Promise.all([
+        studyGroupsService.addPointsToMember({
+          user_id: user_id,
+          group_id: question.group_id.toString(),
+          pointsToAdd: POINTS.REPLY_CREATED
+        }),
 
-    if (question && question.user_id.toString() !== user_id) {
-      notificationsService.createNotification({
-        user_id: question.user_id.toString(),
-        actor_id: user_id,
-        reference_id: question_id,
-        type: NotificationType.Group,
-        content: `replied to your question`,
-        target_url: `/groups/${question.group_id}/questions/${question_id}?replyId=${reply._id}`,
-        group_id: question.group_id.toString()
-      });
+        question.user_id.toString() !== user_id
+          ? notificationsService.createNotification({
+              user_id: question.user_id.toString(),
+              actor_id: user_id,
+              reference_id: question_id,
+              type: NotificationType.Group,
+              content: `replied to your question`,
+              target_url: `/groups/${question.group_id}/questions/${question_id}?replyId=${insertResult.insertedId}`,
+              group_id: question.group_id.toString()
+            })
+          : Promise.resolve()
+      ]);
     }
 
     return {
-      ...reply,
+      _id: insertResult.insertedId,
+      content,
+      question_id: questionObjectId,
+      medias: medias || [],
+      parent_id: parent_id ? new ObjectId(parent_id) : null,
+      created_at: newReply.created_at,
+      updated_at: newReply.updated_at,
+      user_info: user,
+      reply_count: question ? question.reply_count : 1,
       upvotes: 0,
       downvotes: 0,
       user_vote: null
@@ -548,24 +522,8 @@ class RepliesService {
       });
     }
 
-    const question_id = result.question_id;
-
-    const [replyCountInfo] = await databaseService.replies
-      .aggregate([
-        {
-          $match: { question_id: question_id }
-        },
-        {
-          $count: 'reply_count'
-        }
-      ])
-      .toArray();
-
-    const reply_count = replyCountInfo ? replyCountInfo.reply_count : 0;
-
     return {
-      deleted_reply: result,
-      reply_count
+      deleted_reply: result
     };
   }
 }

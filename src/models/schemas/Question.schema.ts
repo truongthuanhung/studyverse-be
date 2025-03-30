@@ -11,6 +11,9 @@ interface IQuestion {
   tags: ObjectId[];
   medias: string[];
   mentions: ObjectId[];
+  reply_count?: number;
+  upvotes?: number;
+  downvotes?: number;
   approved_at?: Date | null;
   created_at?: Date;
   updated_at?: Date;
@@ -26,6 +29,9 @@ export default class Question {
   tags: ObjectId[];
   medias: string[];
   mentions: ObjectId[];
+  upvotes: number;
+  downvotes: number;
+  reply_count: number;
   approved_at: Date | null;
   created_at: Date;
   updated_at: Date;
@@ -40,6 +46,9 @@ export default class Question {
     this.tags = question.tags;
     this.medias = question.medias;
     this.mentions = question.mentions;
+    this.reply_count = question.reply_count || 0;
+    this.upvotes = question.upvotes || 0;
+    this.downvotes = question.downvotes || 0;
     this.approved_at = question.approved_at || null;
     this.created_at = question.created_at || date;
     this.updated_at = question.updated_at || date;

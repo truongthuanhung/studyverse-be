@@ -13,3 +13,19 @@ export const tagIdValidator = validate(
     ['params']
   )
 );
+
+export const getTagsByUsageInGroupValidator = validate(
+  checkSchema({
+    order: {
+      in: ['query'],
+      optional: true,
+      isString: {
+        errorMessage: 'Order must be a string'
+      },
+      isIn: {
+        options: [['asc', 'desc']],
+        errorMessage: 'Order must be either "asc" or "desc"'
+      }
+    }
+  })
+);

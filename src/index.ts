@@ -21,16 +21,20 @@ import recommendationsRouter from './routes/recommendations.routes';
 import relationshipsRouter from './routes/relationships.routes';
 import invitationsRouter from './routes/invitations.routes';
 import tagsRouter from './routes/tags.routes';
+import searchRouter from './routes/search.routes';
 //import '~/utils/friends_faker';
 //import '~/utils/faker';
 //import '~/utils/invitations_faker';
+//import '~/utils/faker.questions';
+//import '~/utils/create_groups.faker';
+//import '~/utils/notifications.faker';
 config();
 
 const port = process.env.PORT || 3003;
 const app = express();
 const httpServer = createServer(app);
 
-initFolder(UPLOAD_DIRIRECTORY);
+initFolder(UPLOAD_DIRIRECTORY)
 initFolder(UPLOAD_TEMP_DIRECTORY);
 
 databaseService.connect().catch(console.dir);
@@ -52,6 +56,7 @@ app.use('/recommendations', recommendationsRouter);
 app.use('/relationships', relationshipsRouter);
 app.use('/invitations', invitationsRouter);
 app.use('/tags', tagsRouter);
+app.use('/search', searchRouter);
 
 //ERROR HANDLER
 app.use(defaultErrorHandler);

@@ -144,7 +144,7 @@ class NotificationsService {
     user_id: string;
     page: number;
     limit: number;
-    status?: NotificationStatus; // Status là tham số tùy chọn
+    status?: NotificationStatus;
   }) {
     const skip = (page - 1) * limit;
 
@@ -156,72 +156,86 @@ class NotificationsService {
       matchCondition.status = status;
     }
 
-    // Use aggregation to get notifications with actor information
-    const notifications = await databaseService.notifications
+    // Sử dụng $facet để thực hiện cả hai tác vụ trong một truy vấn
+    const result = await databaseService.notifications
       .aggregate([
         {
           $match: matchCondition
         },
         {
-          $sort: { created_at: -1 } // Sort by created_at in descending order (mặc định luôn là newest)
-        },
-        {
-          $skip: skip
-        },
-        {
-          $limit: limit
-        },
-        {
-          $lookup: {
-            from: 'users',
-            localField: 'actor_id',
-            foreignField: '_id',
-            as: 'actor'
-          }
-        },
-        {
-          $unwind: {
-            path: '$actor',
-            preserveNullAndEmptyArrays: true
-          }
-        },
-        {
-          $lookup: {
-            from: 'study_groups',
-            localField: 'group_id',
-            foreignField: '_id',
-            as: 'group'
-          }
-        },
-        {
-          $unwind: {
-            path: '$group',
-            preserveNullAndEmptyArrays: true
-          }
-        },
-        {
-          $project: {
-            _id: 1,
-            user_id: 1,
-            actor_id: 1,
-            reference_id: 1,
-            target_url: 1,
-            type: 1,
-            content: 1,
-            status: 1,
-            group_id: 1,
-            created_at: 1,
-            'actor.name': 1,
-            'actor.avatar': 1,
-            'actor.username': 1,
-            'group.name': 1
+          $facet: {
+            // Pipeline để lấy danh sách thông báo
+            notifications: [
+              {
+                $sort: { created_at: -1 }
+              },
+              {
+                $skip: skip
+              },
+              {
+                $limit: limit
+              },
+              {
+                $lookup: {
+                  from: 'users',
+                  localField: 'actor_id',
+                  foreignField: '_id',
+                  as: 'actor'
+                }
+              },
+              {
+                $unwind: {
+                  path: '$actor',
+                  preserveNullAndEmptyArrays: true
+                }
+              },
+              {
+                $lookup: {
+                  from: 'study_groups',
+                  localField: 'group_id',
+                  foreignField: '_id',
+                  as: 'group'
+                }
+              },
+              {
+                $unwind: {
+                  path: '$group',
+                  preserveNullAndEmptyArrays: true
+                }
+              },
+              {
+                $project: {
+                  _id: 1,
+                  user_id: 1,
+                  actor_id: 1,
+                  reference_id: 1,
+                  target_url: 1,
+                  type: 1,
+                  content: 1,
+                  status: 1,
+                  group_id: 1,
+                  created_at: 1,
+                  'actor.name': 1,
+                  'actor.avatar': 1,
+                  'actor.username': 1,
+                  'group.name': 1
+                }
+              }
+            ],
+            // Pipeline để đếm tổng số thông báo
+            totalCount: [
+              {
+                $count: 'count'
+              }
+            ]
           }
         }
       ])
       .toArray();
 
-    // Get total count for pagination
-    const total = await databaseService.notifications.countDocuments(matchCondition);
+    // Lấy kết quả từ $facet
+    const notifications = result[0].notifications;
+    const total = result[0].totalCount[0]?.count || 0;
     const totalPages = Math.ceil(total / limit);
 
     return {

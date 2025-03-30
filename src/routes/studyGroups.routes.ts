@@ -18,7 +18,11 @@ import {
   removeMemberController,
   requestToJoinGroupController
 } from '~/controllers/studyGroups.controllers';
-import { getTagInGroupController, searchTagsByGroupController } from '~/controllers/tags.controllers';
+import {
+  getTagInGroupController,
+  getTagsByUsageInGroupController,
+  searchTagsByGroupController
+} from '~/controllers/tags.controllers';
 import { filterMiddleware } from '~/middlewares/common.middlewares';
 import {
   adminValidator,
@@ -49,6 +53,13 @@ studyGroupRouter.get(
   accessTokenValidator,
   validateGroupMembership,
   wrapRequestHandler(searchTagsByGroupController)
+);
+
+studyGroupRouter.get(
+  '/:group_id/top-tags',
+  accessTokenValidator,
+  validateGroupMembership,
+  wrapRequestHandler(getTagsByUsageInGroupController)
 );
 
 studyGroupRouter.get(

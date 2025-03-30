@@ -1,5 +1,6 @@
 import { ObjectId } from 'mongodb';
 import { StudyGroupRole } from '~/constants/enums';
+import Badge from './Badge.schema';
 
 interface StudyGroupMemberType {
   _id?: ObjectId;
@@ -7,6 +8,7 @@ interface StudyGroupMemberType {
   group_id: ObjectId;
   role: StudyGroupRole;
   points?: number;
+  badges?: Badge[];
   created_at?: Date;
   updated_at?: Date;
 }
@@ -17,6 +19,7 @@ export default class StudyGroupMember {
   group_id: ObjectId;
   role: StudyGroupRole;
   points: number;
+  badges: Badge[];
   created_at: Date;
   updated_at: Date;
 
@@ -27,6 +30,7 @@ export default class StudyGroupMember {
     this.group_id = member.group_id;
     this.role = member.role;
     this.points = member.points || 0;
+    this.badges = member.badges || [];
     this.created_at = member.created_at || date;
     this.updated_at = member.updated_at || date;
   }

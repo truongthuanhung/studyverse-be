@@ -2,9 +2,12 @@ import { Router } from 'express';
 import {
   createReplyController,
   deleteReplyController,
+  downvoteReplyController,
   editReplyController,
   getRepliesByQuestionIdController,
   getReplyByIdController,
+  unvoteReplyController,
+  upvoteReplyController,
   voteReplyController
 } from '~/controllers/replies.controllers';
 import { filterMiddleware, paginationValidator } from '~/middlewares/common.middlewares';
@@ -43,6 +46,30 @@ repliesRouter.post(
   validateGroupQuestionAndMembership,
   voteReplyValidator,
   wrapRequestHandler(voteReplyController)
+);
+
+repliesRouter.post(
+  '/:reply_id/upvotes',
+  accessTokenValidator,
+  validateGroupQuestionAndMembership,
+  voteReplyValidator,
+  wrapRequestHandler(upvoteReplyController)
+);
+
+repliesRouter.post(
+  '/:reply_id/downvotes',
+  accessTokenValidator,
+  validateGroupQuestionAndMembership,
+  voteReplyValidator,
+  wrapRequestHandler(downvoteReplyController)
+);
+
+repliesRouter.post(
+  '/:reply_id/unvotes',
+  accessTokenValidator,
+  validateGroupQuestionAndMembership,
+  voteReplyValidator,
+  wrapRequestHandler(unvoteReplyController)
 );
 
 repliesRouter.delete(

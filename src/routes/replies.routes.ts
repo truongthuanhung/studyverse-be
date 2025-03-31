@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import {
+  approveReplyByQuestionOwnerController,
+  approveReplyByTeacherAdminController,
   createReplyController,
   deleteReplyController,
   downvoteReplyController,
@@ -18,7 +20,10 @@ import {
   replyIdValidator,
   voteReplyValidator
 } from '~/middlewares/replies.middlewares';
-import { validateGroupQuestionAndMembership } from '~/middlewares/studyGroups.middlewares';
+import {
+  validateGroupQuestionAndMembership,
+  validateGroupQuestionReplyAndMembership
+} from '~/middlewares/studyGroups.middlewares';
 import { accessTokenValidator } from '~/middlewares/users.middlewares';
 import { wrapRequestHandler } from '~/utils/handlers';
 
@@ -92,8 +97,24 @@ repliesRouter.patch(
 repliesRouter.get(
   '/:reply_id',
   accessTokenValidator,
-  validateGroupQuestionAndMembership,
+  validateGroupQuestionReplyAndMembership,
   wrapRequestHandler(getReplyByIdController)
+);
+
+repliesRouter.put(
+  '/:reply_id/teacher-approve',
+  accessTokenValidator,
+  validateGroupQuestionReplyAndMembership,
+  replyIdValidator,
+  wrapRequestHandler(approveReplyByTeacherAdminController)
+);
+
+repliesRouter.put(
+  '/:reply_id/user-approve',
+  accessTokenValidator,
+  validateGroupQuestionReplyAndMembership,
+  replyIdValidator,
+  wrapRequestHandler(approveReplyByQuestionOwnerController)
 );
 
 export default repliesRouter;

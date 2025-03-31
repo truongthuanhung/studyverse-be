@@ -1,51 +1,100 @@
 import { ObjectId, WithId } from 'mongodb';
-import { LikeType } from '~/constants/enums';
+import { InteractionType, LikeType } from '~/constants/enums';
 import HTTP_STATUS from '~/constants/httpStatus';
 import { ErrorWithStatus } from '~/models/Errors';
 import { LikeRequestBody } from '~/models/requests/Like.requests';
 import Like from '~/models/schemas/Like.schema';
 import databaseService from '~/services/database.services';
-import usersService from './users.services';
+import tagsService from './tags.services';
 
 class LikeService {
   async like(user_id: string, body: LikeRequestBody) {
     const { target_id, type } = body;
+    const userId = new ObjectId(user_id);
+    const targetId = new ObjectId(target_id);
 
-    await databaseService.likes.findOneAndUpdate(
-      {
-        user_id: new ObjectId(user_id),
-        target_id: new ObjectId(target_id)
-      },
-      {
-        $setOnInsert: new Like({
-          user_id: new ObjectId(user_id),
-          target_id: new ObjectId(target_id),
-          type
-        })
-      },
-      {
-        upsert: true
+    const session = databaseService.client.startSession();
+    try {
+      session.startTransaction();
+
+      const result = await databaseService.likes.findOneAndUpdate(
+        {
+          user_id: userId,
+          target_id: targetId
+        },
+        {
+          $setOnInsert: new Like({
+            user_id: userId,
+            target_id: targetId,
+            type
+          })
+        },
+        {
+          upsert: true,
+          returnDocument: 'after',
+          session
+        }
+      );
+
+      if (result) {
+        const targetCollection = type === LikeType.PostLike ? databaseService.posts : databaseService.comments;
+        await targetCollection.updateOne({ _id: targetId }, { $inc: { like_count: 1 } }, { session });
+
+        // Gọi addUserTagInteraction nhưng không chờ kết quả
+        if (type === LikeType.PostLike) {
+          const post = await databaseService.posts.findOne({ _id: targetId });
+          if (post?.tags?.length) {
+            post.tags.forEach((tagId: ObjectId) => {
+              tagsService.addUserTagInteraction({ user_id, tag_id: tagId.toString(), type: InteractionType.Like });
+            });
+          }
+        }
       }
-    );
 
-    const like_count = await databaseService.likes.countDocuments({
-      target_id: new ObjectId(target_id)
-    });
+      const like_count = await databaseService.likes.countDocuments({ target_id: targetId }, { session });
 
-    return like_count;
+      await session.commitTransaction();
+      return like_count;
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
+    }
   }
 
   async unlike(user_id: string, target_id: string) {
-    await databaseService.likes.findOneAndDelete({
-      user_id: new ObjectId(user_id),
-      target_id: new ObjectId(target_id)
-    });
+    const userId = new ObjectId(user_id);
+    const targetId = new ObjectId(target_id);
 
-    const like_count = await databaseService.likes.countDocuments({
-      target_id: new ObjectId(target_id)
-    });
+    const session = databaseService.client.startSession();
+    try {
+      session.startTransaction();
 
-    return like_count;
+      const deletedLike = await databaseService.likes.findOneAndDelete(
+        {
+          user_id: userId,
+          target_id: targetId
+        },
+        { session }
+      );
+
+      if (deletedLike) {
+        const type = deletedLike.type;
+        const targetCollection = type === LikeType.PostLike ? databaseService.posts : databaseService.comments;
+        await targetCollection.updateOne({ _id: targetId }, { $inc: { like_count: -1 } }, { session });
+      }
+
+      const like_count = await databaseService.likes.countDocuments({ target_id: targetId }, { session });
+
+      await session.commitTransaction();
+      return like_count;
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
+    }
   }
 
   async getLikesByPostId(post_id: string, page: number = 1, limit: number = 20) {

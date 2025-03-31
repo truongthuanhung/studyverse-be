@@ -4,6 +4,8 @@ import Comment from '~/models/schemas/Comment.schema';
 import { ClientSession, ObjectId } from 'mongodb';
 import { ErrorWithStatus } from '~/models/Errors';
 import HTTP_STATUS from '~/constants/httpStatus';
+import tagsService from './tags.services';
+import { InteractionType } from '~/constants/enums';
 
 class CommentsService {
   async checkCommentExists(comment_id: string) {
@@ -14,68 +16,108 @@ class CommentsService {
   }
 
   async commentOnPost(user_id: string, body: CreateCommentRequestBody) {
-    const commentData = new Comment({
-      ...body,
-      user_id: new ObjectId(user_id),
-      post_id: new ObjectId(body.post_id),
-      parent_id: body.parent_id ? new ObjectId(body.parent_id) : null
-    });
+    // Khởi tạo session
+    const session = databaseService.client.startSession();
 
-    // Tạo comment mới
-    const result = await databaseService.comments.insertOne(commentData);
+    try {
+      // Bắt đầu transaction
+      let comment, comment_count;
 
-    if (!result.insertedId) {
-      throw new Error('Failed to create comment');
-    }
+      await session.withTransaction(async () => {
+        const commentData = new Comment({
+          ...body,
+          user_id: new ObjectId(user_id),
+          post_id: new ObjectId(body.post_id),
+          parent_id: body.parent_id ? new ObjectId(body.parent_id) : null
+        });
 
-    // Lấy thông tin comment vừa được tạo
-    const [comment] = await databaseService.comments
-      .aggregate([
-        {
-          $match: { _id: result.insertedId }
-        },
-        {
-          $lookup: {
-            from: 'users',
-            localField: 'user_id',
-            foreignField: '_id',
-            pipeline: [
+        // Tạo comment mới trong transaction
+        const result = await databaseService.comments.insertOne(commentData, { session });
+
+        if (!result.insertedId) {
+          throw new Error('Failed to create comment');
+        }
+
+        // Tăng comment_count của bài viết lên 1 trong transaction
+        await databaseService.posts.updateOne(
+          { _id: new ObjectId(body.post_id) },
+          { $inc: { comment_count: 1 } },
+          { session }
+        );
+
+        // Lấy thông tin comment vừa được tạo
+        const [commentResult] = await databaseService.comments
+          .aggregate(
+            [
+              {
+                $match: { _id: result.insertedId }
+              },
+              {
+                $lookup: {
+                  from: 'users',
+                  localField: 'user_id',
+                  foreignField: '_id',
+                  pipeline: [
+                    {
+                      $project: {
+                        _id: 1,
+                        name: 1,
+                        username: 1,
+                        avatar: 1
+                      }
+                    }
+                  ],
+                  as: 'user_info'
+                }
+              },
+              {
+                $unwind: '$user_info'
+              },
               {
                 $project: {
                   _id: 1,
-                  name: 1,
-                  username: 1,
-                  avatar: 1
+                  content: 1,
+                  post_id: 1,
+                  parent_id: 1,
+                  created_at: 1,
+                  updated_at: 1,
+                  user_info: 1
                 }
               }
             ],
-            as: 'user_info'
-          }
-        },
-        {
-          $unwind: '$user_info'
-        },
-        {
-          $project: {
-            _id: 1,
-            content: 1,
-            post_id: 1,
-            parent_id: 1,
-            created_at: 1,
-            updated_at: 1,
-            user_info: 1
-          }
+            { session }
+          )
+          .toArray();
+
+        // Đếm số lượng comment cho bài viết
+        const commentCountResult = await databaseService.comments.countDocuments(
+          { post_id: new ObjectId(body.post_id) },
+          { session }
+        );
+
+        const post = await databaseService.posts.findOne({ _id: new ObjectId(body.post_id) }, { session });
+
+        if (post?.tags?.length) {
+          post.tags.forEach((tagId: ObjectId) => {
+            tagsService.addUserTagInteraction({
+              user_id,
+              tag_id: tagId.toString(),
+              type: InteractionType.Comment
+            });
+          });
         }
-      ])
-      .toArray();
 
-    // Đếm số lượng comment cho bài viết
-    const comment_count = await databaseService.comments.countDocuments({
-      post_id: new ObjectId(body.post_id)
-    });
+        comment = commentResult;
+        comment_count = commentCountResult;
+      });
 
-    // Trả về comment kèm comment_count
-    return { comment, comment_count };
+      return { comment, comment_count };
+    } catch (error) {
+      throw error;
+    } finally {
+      // Kết thúc session bất kể có lỗi hay không
+      await session.endSession();
+    }
   }
 
   async updateComment(user_id: string, comment_id: string, body: UpdateCommentRequestBody) {
@@ -109,7 +151,28 @@ class CommentsService {
 
     try {
       // Start transaction
+      let deletedComment, updatedCommentCount;
+
       await session.withTransaction(async () => {
+        // Find the comment first to get the post_id
+        const comment = await databaseService.comments.findOne(
+          {
+            _id: new ObjectId(comment_id),
+            user_id: new ObjectId(user_id)
+          },
+          { session }
+        );
+
+        if (!comment) {
+          throw new ErrorWithStatus({
+            message: 'Comment not found',
+            status: HTTP_STATUS.NOT_FOUND
+          });
+        }
+
+        // Store post_id to update comment count later
+        const post_id = comment.post_id;
+
         // Delete the main comment
         const result = await databaseService.comments.findOneAndDelete(
           {
@@ -119,18 +182,22 @@ class CommentsService {
           { session }
         );
 
-        if (!result) {
-          throw new ErrorWithStatus({
-            message: 'Comment not found',
-            status: HTTP_STATUS.NOT_FOUND
-          });
-        }
-
         // Delete all child comments recursively
         await this.deleteChildComments(comment_id, session);
 
-        return result;
+        // Decrease comment_count of the post by 1
+        await databaseService.posts.updateOne({ _id: post_id }, { $inc: { comment_count: -1 } }, { session });
+
+        // Get updated comment count
+        const commentCountResult = await databaseService.comments.countDocuments({ post_id }, { session });
+
+        deletedComment = result;
+        updatedCommentCount = commentCountResult;
       });
+
+      return { deletedComment, updatedCommentCount };
+    } catch (error) {
+      throw error;
     } finally {
       await session.endSession();
     }
@@ -143,9 +210,6 @@ class CommentsService {
     // If there are children, delete them and their children recursively
     for (const child of childComments) {
       await databaseService.comments.deleteOne({ _id: child._id }, { session });
-
-      // Recursively delete children of this comment
-      await this.deleteChildComments(child._id.toString(), session);
     }
   }
 

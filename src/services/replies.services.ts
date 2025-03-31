@@ -4,7 +4,7 @@ import Reply from '~/models/schemas/Reply.schema';
 import { ObjectId } from 'mongodb';
 import { ErrorWithStatus } from '~/models/Errors';
 import HTTP_STATUS from '~/constants/httpStatus';
-import { NotificationType, VoteType } from '~/constants/enums';
+import { NotificationType, ReplyApprovedByType, VoteType } from '~/constants/enums';
 import notificationsService from './notifications.services';
 import studyGroupsService from './studyGroups.services';
 import { POINTS } from '~/constants/points';
@@ -325,7 +325,9 @@ class RepliesService {
               user_info: 1,
               upvotes: 1,
               downvotes: 1,
-              user_vote: 1
+              user_vote: 1,
+              approved_by_user: 1,
+              approved_by_teacher: 1
             }
           },
           {
@@ -491,7 +493,9 @@ class RepliesService {
             user_info: 1,
             upvotes: 1,
             downvotes: 1,
-            user_vote: 1
+            user_vote: 1,
+            approved_by_user: 1,
+            approved_by_teacher: 1
           }
         }
       ])
@@ -525,6 +529,30 @@ class RepliesService {
     return {
       deleted_reply: result
     };
+  }
+
+  async approveReply(reply_id: string, type: ReplyApprovedByType) {
+    const updateData: any = {
+      updated_at: new Date()
+    };
+
+    if (type === ReplyApprovedByType.User) {
+      updateData.approved_by_user = true;
+    } else if (type === ReplyApprovedByType.Teacher) {
+      updateData.approved_by_teacher = true;
+    }
+
+    const updatedReply = await databaseService.replies.findOneAndUpdate(
+      { _id: new ObjectId(reply_id) },
+      { $set: updateData },
+      { returnDocument: 'after' } // Trả về document sau khi cập nhật
+    );
+
+    if (!updatedReply) {
+      throw new Error('Reply not found or cannot be updated');
+    }
+
+    return updatedReply;
   }
 }
 

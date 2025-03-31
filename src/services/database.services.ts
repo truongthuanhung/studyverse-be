@@ -23,6 +23,7 @@ import StudyGroupInvitation from '~/models/schemas/StudyGroupInvitation.schema';
 import Tag from '~/models/schemas/Tag.schema';
 import GroupTag from '~/models/schemas/GroupTag.schema';
 import SearchHistory from '~/models/schemas/SearchHistory.schema';
+import UserTagInteraction from '~/models/schemas/UserTagInteraction';
 
 config();
 const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@studyverse.otnmy.mongodb.net/?retryWrites=true&w=majority&appName=StudyVerse`;
@@ -139,6 +140,9 @@ class DatabaseService {
   }
   get search_history(): Collection<SearchHistory> {
     return this.db.collection('search_history');
+  }
+  get user_tag_interactions(): Collection<UserTagInteraction> {
+    return this.db.collection('user_tag_interactions');
   }
 }
 

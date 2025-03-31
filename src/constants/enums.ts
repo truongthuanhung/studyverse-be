@@ -98,3 +98,15 @@ export enum SearchTargetType {
   Group,
   User
 }
+
+export enum ReplyApprovedByType {
+  User,
+  Teacher
+}
+
+export enum InteractionType {
+  Like,
+  Comment,
+  Post,
+  Share
+}

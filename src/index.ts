@@ -22,6 +22,7 @@ import relationshipsRouter from './routes/relationships.routes';
 import invitationsRouter from './routes/invitations.routes';
 import tagsRouter from './routes/tags.routes';
 import searchRouter from './routes/search.routes';
+//import '~/scripts/friendPosts.faker';
 //import '~/utils/friends_faker';
 //import '~/utils/faker';
 //import '~/utils/invitations_faker';
@@ -34,7 +35,7 @@ const port = process.env.PORT || 3003;
 const app = express();
 const httpServer = createServer(app);
 
-initFolder(UPLOAD_DIRIRECTORY)
+initFolder(UPLOAD_DIRIRECTORY);
 initFolder(UPLOAD_TEMP_DIRECTORY);
 
 databaseService.connect().catch(console.dir);

@@ -4,8 +4,9 @@ import { ObjectId } from 'mongodb';
 import Post from '~/models/schemas/Post.schema';
 import { ErrorWithStatus } from '~/models/Errors';
 import HTTP_STATUS from '~/constants/httpStatus';
-import { PostPrivacy, PostType } from '~/constants/enums';
+import { InteractionType, PostPrivacy, PostType } from '~/constants/enums';
 import usersService from './users.services';
+import tagsService from './tags.services';
 
 class PostsService {
   async checkPostExists(post_id: string) {
@@ -34,11 +35,16 @@ class PostsService {
       })
     );
     const createdPost = await this.getPostById(user_id, result.insertedId.toString());
+    if (post?.tags?.length) {
+      post.tags.forEach((tag_id) => {
+        tagsService.addUserTagInteraction({ user_id, tag_id: tag_id.toString(), type: InteractionType.Post });
+      });
+    }
     return createdPost;
   }
 
   async getPostById(user_id: string, post_id: string) {
-    const [post] = await databaseService.posts
+    const [result] = await databaseService.posts
       .aggregate([
         {
           $match: {
@@ -50,6 +56,16 @@ class PostsService {
             from: 'users',
             localField: 'user_id',
             foreignField: '_id',
+            pipeline: [
+              {
+                $project: {
+                  _id: 1,
+                  name: 1,
+                  username: 1,
+                  avatar: 1
+                }
+              }
+            ],
             as: 'user'
           }
         },
@@ -58,9 +74,20 @@ class PostsService {
             from: 'users',
             localField: 'mentions',
             foreignField: '_id',
+            pipeline: [
+              {
+                $project: {
+                  _id: 1,
+                  name: 1,
+                  username: 1,
+                  avatar: 1
+                }
+              }
+            ],
             as: 'mentioned_users'
           }
         },
+        // Only lookup for checking if user liked the post
         {
           $lookup: {
             from: 'likes',
@@ -68,29 +95,20 @@ class PostsService {
             pipeline: [
               {
                 $match: {
-                  $expr: {
-                    $eq: ['$target_id', '$$post_id']
-                  }
+                  $and: [{ $expr: { $eq: ['$target_id', '$$post_id'] } }, { user_id: new ObjectId(user_id) }]
                 }
               }
             ],
-            as: 'likes'
+            as: 'user_likes'
           }
         },
+        // Lookup tag details
         {
           $lookup: {
-            from: 'comments',
-            let: { post_id: '$_id' },
-            pipeline: [
-              {
-                $match: {
-                  $expr: {
-                    $eq: ['$post_id', '$$post_id']
-                  }
-                }
-              }
-            ],
-            as: 'comments'
+            from: 'tags',
+            localField: 'tags',
+            foreignField: '_id',
+            as: 'tags'
           }
         },
         {
@@ -128,24 +146,52 @@ class PostsService {
                 }
               }
             },
-            like_count: { $size: '$likes' },
-            comment_count: { $size: '$comments' },
-            isLiked: {
-              $in: [new ObjectId(user_id), '$likes.user_id']
-            }
+            like_count: 1, // Use existing field
+            comment_count: 1, // Use existing field
+            isLiked: { $gt: [{ $size: '$user_likes' }, 0] }
           }
         }
       ])
       .toArray();
 
-    if (!post) {
+    if (!result) {
       return null;
     }
 
-    return post;
+    return result;
   }
 
-  async sharePost(user_id: string, body: SharePostRequestBody) {}
+  async sharePost(user_id: string, post: SharePostRequestBody) {
+    const [result, parent_post] = await Promise.all([
+      databaseService.posts.insertOne(
+        new Post({
+          content: post.content,
+          type: PostType.SharePost,
+          privacy: post.privacy,
+          user_id: new ObjectId(user_id),
+          parent_id: post.parent_id ? new ObjectId(post.parent_id) : null,
+          mentions: post.mentions.map((mention) => new ObjectId(mention))
+        })
+      ),
+      databaseService.posts.findOne({
+        _id: new ObjectId(post.parent_id)
+      })
+    ]);
+
+    if (!parent_post) {
+      throw new ErrorWithStatus({
+        message: 'Parent post not found',
+        status: HTTP_STATUS.NOT_FOUND
+      });
+    }
+    if (parent_post?.tags?.length) {
+      parent_post.tags.forEach((tag_id) => {
+        tagsService.addUserTagInteraction({ user_id, tag_id: tag_id.toString(), type: InteractionType.Post });
+      });
+    }
+    const sharedPost = await this.getPostById(user_id, result.insertedId.toString());
+    return sharedPost;
+  }
 
   async getMyPosts({ user_id, limit, page }: { user_id: string; limit: number; page: number }) {
     page = Math.max(1, page);
@@ -209,6 +255,7 @@ class PostsService {
                   as: 'mentioned_users'
                 }
               },
+              // Only lookup for checking if user liked the post
               {
                 $lookup: {
                   from: 'likes',
@@ -216,29 +263,11 @@ class PostsService {
                   pipeline: [
                     {
                       $match: {
-                        $expr: {
-                          $eq: ['$target_id', '$$post_id']
-                        }
+                        $and: [{ $expr: { $eq: ['$target_id', '$$post_id'] } }, { user_id: new ObjectId(user_id) }]
                       }
                     }
                   ],
-                  as: 'likes'
-                }
-              },
-              {
-                $lookup: {
-                  from: 'comments',
-                  let: { post_id: '$_id' },
-                  pipeline: [
-                    {
-                      $match: {
-                        $expr: {
-                          $eq: ['$post_id', '$$post_id']
-                        }
-                      }
-                    }
-                  ],
-                  as: 'comments'
+                  as: 'user_likes'
                 }
               },
               // Lookup tag details
@@ -285,11 +314,9 @@ class PostsService {
                       }
                     }
                   },
-                  like_count: { $size: '$likes' },
-                  comment_count: { $size: '$comments' },
-                  isLiked: {
-                    $in: [new ObjectId(user_id), '$likes.user_id']
-                  }
+                  like_count: 1, // Use existing field
+                  comment_count: 1, // Use existing field
+                  isLiked: { $gt: [{ $size: '$user_likes' }, 0] }
                 }
               }
             ],
@@ -421,6 +448,7 @@ class PostsService {
                   as: 'mentioned_users'
                 }
               },
+              // Only lookup for checking if viewer liked the post
               {
                 $lookup: {
                   from: 'likes',
@@ -428,29 +456,11 @@ class PostsService {
                   pipeline: [
                     {
                       $match: {
-                        $expr: {
-                          $eq: ['$target_id', '$$post_id']
-                        }
+                        $and: [{ $expr: { $eq: ['$target_id', '$$post_id'] } }, { user_id: viewerObjectId }]
                       }
                     }
                   ],
-                  as: 'likes'
-                }
-              },
-              {
-                $lookup: {
-                  from: 'comments',
-                  let: { post_id: '$_id' },
-                  pipeline: [
-                    {
-                      $match: {
-                        $expr: {
-                          $eq: ['$post_id', '$$post_id']
-                        }
-                      }
-                    }
-                  ],
-                  as: 'comments'
+                  as: 'viewer_likes'
                 }
               },
               // Lookup tag details
@@ -497,11 +507,9 @@ class PostsService {
                       }
                     }
                   },
-                  like_count: { $size: '$likes' },
-                  comment_count: { $size: '$comments' },
-                  isLiked: {
-                    $in: [viewerObjectId, '$likes.user_id']
-                  }
+                  like_count: 1, // Use existing field
+                  comment_count: 1, // Use existing field
+                  isLiked: { $gt: [{ $size: '$viewer_likes' }, 0] }
                 }
               }
             ],
@@ -603,6 +611,7 @@ class PostsService {
                   as: 'mentioned_users'
                 }
               },
+              // Only lookup for checking if user liked the post
               {
                 $lookup: {
                   from: 'likes',
@@ -610,29 +619,11 @@ class PostsService {
                   pipeline: [
                     {
                       $match: {
-                        $expr: {
-                          $eq: ['$target_id', '$$post_id']
-                        }
+                        $and: [{ $expr: { $eq: ['$target_id', '$$post_id'] } }, { user_id: new ObjectId(user_id) }]
                       }
                     }
                   ],
-                  as: 'likes'
-                }
-              },
-              {
-                $lookup: {
-                  from: 'comments',
-                  let: { post_id: '$_id' },
-                  pipeline: [
-                    {
-                      $match: {
-                        $expr: {
-                          $eq: ['$post_id', '$$post_id']
-                        }
-                      }
-                    }
-                  ],
-                  as: 'comments'
+                  as: 'user_likes'
                 }
               },
               // Lookup tag details
@@ -679,11 +670,9 @@ class PostsService {
                       }
                     }
                   },
-                  like_count: { $size: '$likes' },
-                  comment_count: { $size: '$comments' },
-                  isLiked: {
-                    $in: [new ObjectId(user_id), '$likes.user_id']
-                  }
+                  like_count: 1, // Use existing field
+                  comment_count: 1, // Use existing field
+                  isLiked: { $gt: [{ $size: '$user_likes' }, 0] }
                 }
               }
             ],

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { ParamsDictionary } from 'express-serve-static-core';
-import { GroupTargetType, VoteType } from '~/constants/enums';
+import { GroupTargetType, ReplyApprovedByType, VoteType } from '~/constants/enums';
 import HTTP_STATUS from '~/constants/httpStatus';
 import { EditQuestionRequestBody } from '~/models/requests/Question.requests';
 import { TokenPayload } from '~/models/requests/User.requests';
@@ -143,6 +143,28 @@ export const unvoteReplyController = async (req: Request<ParamsDictionary, any, 
 
   return res.json({
     message: 'Unvote reply successfully',
+    result
+  });
+};
+
+export const approveReplyByTeacherAdminController = async (req: Request, res: Response) => {
+  const { reply_id } = req.params;
+
+  const result = await repliesService.approveReply(reply_id, ReplyApprovedByType.Teacher);
+
+  return res.json({
+    message: 'Approve reply successfully',
+    result
+  });
+};
+
+export const approveReplyByQuestionOwnerController = async (req: Request, res: Response) => {
+  const { reply_id } = req.params;
+
+  const result = await repliesService.approveReply(reply_id, ReplyApprovedByType.User);
+
+  return res.json({
+    message: 'Approve reply successfully',
     result
   });
 };

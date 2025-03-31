@@ -4,6 +4,8 @@ import Tag from '~/models/schemas/Tag.schema';
 import { ObjectId } from 'mongodb';
 import { ErrorWithStatus } from '~/models/Errors';
 import HTTP_STATUS from '~/constants/httpStatus';
+import { InteractionType } from '~/constants/enums';
+import { InteractionScore } from '~/constants/points';
 
 class TagsService {
   async fetchTagsFromWikidata() {
@@ -225,6 +227,20 @@ class TagsService {
       .toArray();
 
     return topTags;
+  }
+
+  async addUserTagInteraction({ user_id, tag_id, type }: { user_id: string; tag_id: string; type: InteractionType }) {
+    const date = new Date();
+
+    await databaseService.user_tag_interactions.findOneAndUpdate(
+      { user_id: new ObjectId(user_id), tag_id: new ObjectId(tag_id) },
+      {
+        $inc: { interaction_score: InteractionScore[type] },
+        $set: { last_interacted_at: date },
+        $setOnInsert: { created_at: date }
+      },
+      { upsert: true, returnDocument: 'after' }
+    );
   }
 }
 

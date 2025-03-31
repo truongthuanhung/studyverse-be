@@ -579,6 +579,88 @@ export const validateGroupQuestionAndMembership = async (req: Request, res: Resp
   }
 };
 
+export const validateGroupQuestionReplyAndMembership = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { group_id, question_id, reply_id } = req.params;
+    const { user_id } = req.decoded_authorization as TokenPayload;
+
+    // Truy vấn đồng thời để giảm thời gian
+    const [group, question, reply, member] = await Promise.all([
+      databaseService.study_groups.findOne({ _id: new ObjectId(group_id) }),
+      databaseService.questions.findOne({ _id: new ObjectId(question_id) }),
+      databaseService.replies.findOne({ _id: new ObjectId(reply_id) }),
+      databaseService.study_group_members.findOne({
+        user_id: new ObjectId(user_id),
+        group_id: new ObjectId(group_id)
+      })
+    ]);
+
+    // Validation
+    if (!group) {
+      return next(
+        new ErrorWithStatus({
+          message: 'Study group not found',
+          status: HTTP_STATUS.NOT_FOUND
+        })
+      );
+    }
+
+    if (!question) {
+      return next(
+        new ErrorWithStatus({
+          message: 'Question not found',
+          status: HTTP_STATUS.NOT_FOUND
+        })
+      );
+    }
+
+    if (!question.group_id.equals(group._id)) {
+      return next(
+        new ErrorWithStatus({
+          message: 'Question does not belong to study group',
+          status: HTTP_STATUS.FORBIDDEN
+        })
+      );
+    }
+
+    if (!reply) {
+      return next(
+        new ErrorWithStatus({
+          message: 'Reply not found',
+          status: HTTP_STATUS.NOT_FOUND
+        })
+      );
+    }
+
+    if (!reply.question_id.equals(question._id)) {
+      return next(
+        new ErrorWithStatus({
+          message: 'Reply does not belong to question',
+          status: HTTP_STATUS.FORBIDDEN
+        })
+      );
+    }
+
+    if (!member) {
+      return next(
+        new ErrorWithStatus({
+          status: HTTP_STATUS.FORBIDDEN,
+          message: 'User has no permission on this group'
+        })
+      );
+    }
+
+    // Lưu các đối tượng vào request để sử dụng ở controller
+    req.study_group = group;
+    req.question = question;
+    req.reply = reply;
+    req.member = member;
+    next();
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const inviteFriendsValidator = validate(
   checkSchema(
     {

@@ -12,6 +12,5 @@ export interface CreatePostRequestBody {
 export interface SharePostRequestBody {
   content: string;
   privacy: PostPrivacy;
-  parent_id: string;
-  mentions: string[];
+  mentions?: string[];
 }

@@ -111,6 +111,60 @@ class PostsService {
             as: 'tags'
           }
         },
+        // Add lookup for parent post when parent_id is not null
+        {
+          $lookup: {
+            from: 'posts',
+            let: { parent_id: '$parent_id' },
+            pipeline: [
+              {
+                $match: {
+                  $expr: { $eq: ['$_id', '$$parent_id'] }
+                }
+              },
+              {
+                $lookup: {
+                  from: 'users',
+                  localField: 'user_id',
+                  foreignField: '_id',
+                  pipeline: [
+                    {
+                      $project: {
+                        _id: 1,
+                        name: 1,
+                        username: 1,
+                        avatar: 1
+                      }
+                    }
+                  ],
+                  as: 'user'
+                }
+              },
+              {
+                $project: {
+                  _id: 1,
+                  content: 1,
+                  type: 1,
+                  privacy: 1,
+                  medias: 1,
+                  created_at: 1,
+                  user_info: {
+                    $let: {
+                      vars: { user: { $arrayElemAt: ['$user', 0] } },
+                      in: {
+                        user_id: '$$user._id',
+                        name: '$$user.name',
+                        username: '$$user.username',
+                        avatar: '$$user.avatar'
+                      }
+                    }
+                  }
+                }
+              }
+            ],
+            as: 'parent_post'
+          }
+        },
         {
           $project: {
             _id: 1,
@@ -146,6 +200,14 @@ class PostsService {
                 }
               }
             },
+            // Include parent_post information if it exists
+            parent_post: {
+              $cond: {
+                if: { $gt: [{ $size: '$parent_post' }, 0] },
+                then: { $arrayElemAt: ['$parent_post', 0] },
+                else: null
+              }
+            },
             like_count: 1, // Use existing field
             comment_count: 1, // Use existing field
             isLiked: { $gt: [{ $size: '$user_likes' }, 0] }
@@ -161,7 +223,7 @@ class PostsService {
     return result;
   }
 
-  async sharePost(user_id: string, post: SharePostRequestBody) {
+  async sharePost({ user_id, parent_id, post }: { user_id: string; parent_id: string; post: SharePostRequestBody }) {
     const [result, parent_post] = await Promise.all([
       databaseService.posts.insertOne(
         new Post({
@@ -169,12 +231,12 @@ class PostsService {
           type: PostType.SharePost,
           privacy: post.privacy,
           user_id: new ObjectId(user_id),
-          parent_id: post.parent_id ? new ObjectId(post.parent_id) : null,
-          mentions: post.mentions.map((mention) => new ObjectId(mention))
+          parent_id: new ObjectId(parent_id),
+          mentions: (post.mentions || []).map((mention) => new ObjectId(mention))
         })
       ),
       databaseService.posts.findOne({
-        _id: new ObjectId(post.parent_id)
+        _id: new ObjectId(parent_id)
       })
     ]);
 
@@ -279,6 +341,60 @@ class PostsService {
                   as: 'tags'
                 }
               },
+              // Add lookup for parent post when parent_id is not null
+              {
+                $lookup: {
+                  from: 'posts',
+                  let: { parent_id: '$parent_id' },
+                  pipeline: [
+                    {
+                      $match: {
+                        $expr: { $eq: ['$_id', '$$parent_id'] }
+                      }
+                    },
+                    {
+                      $lookup: {
+                        from: 'users',
+                        localField: 'user_id',
+                        foreignField: '_id',
+                        pipeline: [
+                          {
+                            $project: {
+                              _id: 1,
+                              name: 1,
+                              username: 1,
+                              avatar: 1
+                            }
+                          }
+                        ],
+                        as: 'user'
+                      }
+                    },
+                    {
+                      $project: {
+                        _id: 1,
+                        content: 1,
+                        type: 1,
+                        privacy: 1,
+                        medias: 1,
+                        created_at: 1,
+                        user_info: {
+                          $let: {
+                            vars: { user: { $arrayElemAt: ['$user', 0] } },
+                            in: {
+                              user_id: '$$user._id',
+                              name: '$$user.name',
+                              username: '$$user.username',
+                              avatar: '$$user.avatar'
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  as: 'parent_post'
+                }
+              },
               {
                 $project: {
                   _id: 1,
@@ -312,6 +428,14 @@ class PostsService {
                         username: '$$mentioned_user.username',
                         avatar: '$$mentioned_user.avatar'
                       }
+                    }
+                  },
+                  // Include parent_post information if it exists
+                  parent_post: {
+                    $cond: {
+                      if: { $gt: [{ $size: '$parent_post' }, 0] },
+                      then: { $arrayElemAt: ['$parent_post', 0] },
+                      else: null
                     }
                   },
                   like_count: 1, // Use existing field
@@ -472,6 +596,60 @@ class PostsService {
                   as: 'tags'
                 }
               },
+              // Add lookup for parent post when parent_id is not null
+              {
+                $lookup: {
+                  from: 'posts',
+                  let: { parent_id: '$parent_id' },
+                  pipeline: [
+                    {
+                      $match: {
+                        $expr: { $eq: ['$_id', '$$parent_id'] }
+                      }
+                    },
+                    {
+                      $lookup: {
+                        from: 'users',
+                        localField: 'user_id',
+                        foreignField: '_id',
+                        pipeline: [
+                          {
+                            $project: {
+                              _id: 1,
+                              name: 1,
+                              username: 1,
+                              avatar: 1
+                            }
+                          }
+                        ],
+                        as: 'user'
+                      }
+                    },
+                    {
+                      $project: {
+                        _id: 1,
+                        content: 1,
+                        type: 1,
+                        privacy: 1,
+                        medias: 1,
+                        created_at: 1,
+                        user_info: {
+                          $let: {
+                            vars: { user: { $arrayElemAt: ['$user', 0] } },
+                            in: {
+                              user_id: '$$user._id',
+                              name: '$$user.name',
+                              username: '$$user.username',
+                              avatar: '$$user.avatar'
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  as: 'parent_post'
+                }
+              },
               {
                 $project: {
                   _id: 1,
@@ -505,6 +683,14 @@ class PostsService {
                         username: '$$mentioned_user.username',
                         avatar: '$$mentioned_user.avatar'
                       }
+                    }
+                  },
+                  // Include parent_post information if it exists
+                  parent_post: {
+                    $cond: {
+                      if: { $gt: [{ $size: '$parent_post' }, 0] },
+                      then: { $arrayElemAt: ['$parent_post', 0] },
+                      else: null
                     }
                   },
                   like_count: 1, // Use existing field
@@ -537,158 +723,269 @@ class PostsService {
     };
   }
 
-  async getNewFeeds({ user_id, limit, page }: { user_id: string; limit: number; page: number }) {
+  private buildPostLookups(user_id: ObjectId) {
+    return [
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'user_id',
+          foreignField: '_id',
+          pipeline: [
+            {
+              $project: {
+                _id: 1,
+                name: 1,
+                username: 1,
+                avatar: 1
+              }
+            }
+          ],
+          as: 'user'
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'mentions',
+          foreignField: '_id',
+          pipeline: [
+            {
+              $project: {
+                _id: 1,
+                name: 1,
+                username: 1,
+                avatar: 1
+              }
+            }
+          ],
+          as: 'mentioned_users'
+        }
+      },
+      {
+        $lookup: {
+          from: 'likes',
+          let: { post_id: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [{ $eq: ['$target_id', '$$post_id'] }, { $eq: ['$user_id', user_id] }]
+                }
+              }
+            }
+          ],
+          as: 'user_likes'
+        }
+      },
+      {
+        $lookup: {
+          from: 'tags',
+          localField: 'tags',
+          foreignField: '_id',
+          as: 'tags'
+        }
+      },
+      {
+        $lookup: {
+          from: 'posts',
+          let: { parent_id: '$parent_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ['$_id', '$$parent_id'] }
+              }
+            },
+            {
+              $lookup: {
+                from: 'users',
+                localField: 'user_id',
+                foreignField: '_id',
+                pipeline: [
+                  {
+                    $project: {
+                      _id: 1,
+                      name: 1,
+                      username: 1,
+                      avatar: 1
+                    }
+                  }
+                ],
+                as: 'user'
+              }
+            },
+            {
+              $project: {
+                _id: 1,
+                content: 1,
+                type: 1,
+                privacy: 1,
+                medias: 1,
+                created_at: 1,
+                user_info: {
+                  $let: {
+                    vars: { user: { $arrayElemAt: ['$user', 0] } },
+                    in: {
+                      user_id: '$$user._id',
+                      name: '$$user.name',
+                      username: '$$user.username',
+                      avatar: '$$user.avatar'
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          as: 'parent_post'
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          content: 1,
+          type: 1,
+          privacy: 1,
+          parent_id: 1,
+          tags: 1,
+          medias: 1,
+          user_views: 1,
+          created_at: 1,
+          updated_at: 1,
+          user_info: {
+            $let: {
+              vars: { user: { $arrayElemAt: ['$user', 0] } },
+              in: {
+                user_id: '$$user._id',
+                name: '$$user.name',
+                username: '$$user.username',
+                avatar: '$$user.avatar'
+              }
+            }
+          },
+          mentions: {
+            $map: {
+              input: '$mentioned_users',
+              as: 'mentioned_user',
+              in: {
+                user_id: '$$mentioned_user._id',
+                name: '$$mentioned_user.name',
+                username: '$$mentioned_user.username',
+                avatar: '$$mentioned_user.avatar'
+              }
+            }
+          },
+          parent_post: {
+            $cond: {
+              if: { $gt: [{ $size: '$parent_post' }, 0] },
+              then: { $arrayElemAt: ['$parent_post', 0] },
+              else: null
+            }
+          },
+          like_count: 1,
+          comment_count: 1,
+          isLiked: { $gt: [{ $size: '$user_likes' }, 0] }
+        }
+      }
+    ];
+  }
+
+  async getNewsFeed({ user_id, limit, page }: { user_id: string; limit: number; page: number }) {
+    // Chuẩn hóa input
     page = Math.max(1, page);
     limit = Math.max(1, Math.min(limit, 100));
     const skip = (page - 1) * limit;
+    const objectUserId = new ObjectId(user_id);
 
-    const match_user_ids = await databaseService.followers
-      .find({
-        user_id: new ObjectId(user_id)
-      })
-      .toArray();
+    // Tỷ lệ phân phối
+    const FOLLOWED_POST_RATIO = 0.7; // 50% từ followed users
+    const TAG_POST_RATIO = 0.2; // 30% từ top tags
+    const TRENDING_POST_RATIO = 0.1; // 20% từ trending
+    const followedLimit = Math.round(limit * FOLLOWED_POST_RATIO);
+    const tagLimit = Math.round(limit * TAG_POST_RATIO);
+    const trendingLimit = limit - followedLimit - tagLimit;
 
-    const followed_user_ids = match_user_ids.map((item) => item.followed_user_id);
-    // Add user's own id to get their posts too
-    followed_user_ids.push(new ObjectId(user_id));
+    // Lấy dữ liệu song song
+    const [followDocs, topTagDocs] = await Promise.all([
+      databaseService.followers.find({ user_id: objectUserId }, { projection: { followed_user_id: 1 } }).toArray(),
+      databaseService.user_tag_interactions
+        .aggregate([
+          { $match: { user_id: objectUserId } },
+          { $sort: { interaction_count: -1 } },
+          { $limit: 5 },
+          { $project: { tag_id: 1 } }
+        ])
+        .toArray()
+    ]);
 
-    const [result] = await databaseService.posts
-      .aggregate([
-        {
-          $match: {
-            user_id: {
-              $in: followed_user_ids
-            }
-          }
-        },
-        {
-          $facet: {
-            posts: [
-              {
-                $sort: {
-                  created_at: -1
-                }
-              },
-              {
-                $skip: skip
-              },
-              {
-                $limit: limit
-              },
-              {
-                $lookup: {
-                  from: 'users',
-                  localField: 'user_id',
-                  foreignField: '_id',
-                  pipeline: [
-                    {
-                      $project: {
-                        _id: 1,
-                        name: 1,
-                        username: 1,
-                        avatar: 1
-                      }
-                    }
-                  ],
-                  as: 'user'
-                }
-              },
-              {
-                $lookup: {
-                  from: 'users',
-                  localField: 'mentions',
-                  foreignField: '_id',
-                  pipeline: [
-                    {
-                      $project: {
-                        _id: 1,
-                        name: 1,
-                        username: 1,
-                        avatar: 1
-                      }
-                    }
-                  ],
-                  as: 'mentioned_users'
-                }
-              },
-              // Only lookup for checking if user liked the post
-              {
-                $lookup: {
-                  from: 'likes',
-                  let: { post_id: '$_id' },
-                  pipeline: [
-                    {
-                      $match: {
-                        $and: [{ $expr: { $eq: ['$target_id', '$$post_id'] } }, { user_id: new ObjectId(user_id) }]
-                      }
-                    }
-                  ],
-                  as: 'user_likes'
-                }
-              },
-              // Lookup tag details
-              {
-                $lookup: {
-                  from: 'tags',
-                  localField: 'tags',
-                  foreignField: '_id',
-                  as: 'tags'
-                }
-              },
-              {
-                $project: {
-                  _id: 1,
-                  content: 1,
-                  type: 1,
-                  privacy: 1,
-                  parent_id: 1,
-                  tags: 1,
-                  medias: 1,
-                  user_views: 1,
-                  created_at: 1,
-                  updated_at: 1,
-                  user_info: {
-                    $let: {
-                      vars: { user: { $arrayElemAt: ['$user', 0] } },
-                      in: {
-                        user_id: '$$user._id',
-                        name: '$$user.name',
-                        username: '$$user.username',
-                        avatar: '$$user.avatar'
-                      }
-                    }
-                  },
-                  mentions: {
-                    $map: {
-                      input: '$mentioned_users',
-                      as: 'mentioned_user',
-                      in: {
-                        user_id: '$$mentioned_user._id',
-                        name: '$$mentioned_user.name',
-                        username: '$$mentioned_user.username',
-                        avatar: '$$mentioned_user.avatar'
-                      }
-                    }
-                  },
-                  like_count: 1, // Use existing field
-                  comment_count: 1, // Use existing field
-                  isLiked: { $gt: [{ $size: '$user_likes' }, 0] }
-                }
-              }
-            ],
-            total: [{ $count: 'count' }]
-          }
+    const followedUserIds = followDocs.map((doc) => doc.followed_user_id);
+    followedUserIds.push(objectUserId);
+    const topTagIds = topTagDocs.map((doc) => doc.tag_id);
+
+    // Thời gian cho trending posts (24h gần nhất)
+    const trendingThreshold = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    // Pipeline cho từng loại bài viết
+    const followedPipeline = [
+      { $match: { user_id: { $in: followedUserIds } } },
+      { $sort: { created_at: -1 } },
+      { $skip: skip },
+      { $limit: followedLimit },
+      ...this.buildPostLookups(objectUserId)
+    ];
+
+    const tagPipeline = [
+      {
+        $match: {
+          $and: [{ tags: { $in: topTagIds } }, { user_id: { $nin: followedUserIds } }]
         }
-      ])
-      .toArray();
+      },
+      { $sort: { created_at: -1 } },
+      { $skip: skip },
+      { $limit: tagLimit },
+      ...this.buildPostLookups(objectUserId)
+    ];
 
-    const posts = result.posts || [];
-    const total = result.total.length > 0 ? result.total[0].count : 0;
-    const total_pages = Math.ceil(total / limit);
+    const trendingPipeline = [
+      {
+        $match: {
+          created_at: { $gte: trendingThreshold },
+          user_id: { $nin: followedUserIds } // Tránh trùng với followed posts
+        }
+      },
+      {
+        $project: {
+          engagement_score: { $add: ['$like_count', { $multiply: ['$comment_count', 2] }] },
+          doc: '$$ROOT'
+        }
+      },
+      { $sort: { engagement_score: -1 } },
+      { $skip: skip },
+      { $limit: trendingLimit },
+      { $replaceRoot: { newRoot: '$doc' } },
+      ...this.buildPostLookups(objectUserId)
+    ];
+
+    // Thực thi song song và đếm tổng
+    const [followedPosts, tagPosts, trendingPosts, totalCount] = await Promise.all([
+      databaseService.posts.aggregate(followedPipeline).toArray(),
+      databaseService.posts.aggregate(tagPipeline).toArray(),
+      databaseService.posts.aggregate(trendingPipeline).toArray(),
+      databaseService.posts.countDocuments({
+        $or: [
+          { user_id: { $in: followedUserIds } },
+          { $and: [{ tags: { $in: topTagIds } }, { user_id: { $nin: followedUserIds } }] },
+          { created_at: { $gte: trendingThreshold } }
+        ]
+      })
+    ]);
+
+    // Kết hợp kết quả
+    const posts = [...followedPosts, ...tagPosts, ...trendingPosts].sort((a, b) => b.created_at - a.created_at); // Sắp xếp lại theo thời gian
+
+    const total_pages = Math.ceil(totalCount / limit);
 
     return {
       posts,
-      total,
+      total: totalCount,
       page,
       limit,
       total_pages

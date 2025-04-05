@@ -194,168 +194,167 @@ class RepliesService {
     limit = Math.max(1, Math.min(limit, 100));
     const skip = (page - 1) * limit;
 
-    const [result, total] = await Promise.all([
-      databaseService.replies
-        .aggregate([
-          {
-            $match: {
-              question_id: new ObjectId(question_id)
+    const pipeline = [
+      {
+        $match: {
+          question_id: new ObjectId(question_id),
+          parent_id: null
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'user_id',
+          foreignField: '_id',
+          pipeline: [
+            {
+              $project: {
+                _id: 1,
+                name: 1,
+                username: 1,
+                avatar: 1
+              }
             }
-          },
-          {
-            $lookup: {
-              from: 'users',
-              localField: 'user_id',
-              foreignField: '_id',
-              pipeline: [
-                {
-                  $project: {
-                    _id: 1,
-                    name: 1,
-                    username: 1,
-                    avatar: 1
-                  }
-                }
-              ],
-              as: 'user_info'
-            }
-          },
-          { $unwind: '$user_info' },
+          ],
+          as: 'user_info'
+        }
+      },
+      { $unwind: '$user_info' },
 
-          // Lấy số lượng upvotes và downvotes cho mỗi reply
-          {
-            $lookup: {
-              from: 'votes',
-              let: { replyId: '$_id' },
-              pipeline: [
-                {
-                  $match: {
-                    $expr: { $eq: ['$target_id', '$$replyId'] }
-                  }
-                },
-                {
-                  $group: {
-                    _id: '$type',
-                    count: { $sum: 1 }
-                  }
-                }
-              ],
-              as: 'votes'
+      // Lấy số lượng upvotes và downvotes cho mỗi reply
+      {
+        $lookup: {
+          from: 'votes',
+          let: { replyId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ['$target_id', '$$replyId'] }
+              }
+            },
+            {
+              $group: {
+                _id: '$type',
+                count: { $sum: 1 }
+              }
             }
-          },
-          {
-            $addFields: {
-              upvotes: {
-                $ifNull: [
+          ],
+          as: 'votes'
+        }
+      },
+      {
+        $addFields: {
+          upvotes: {
+            $ifNull: [
+              {
+                $arrayElemAt: [
                   {
-                    $arrayElemAt: [
-                      {
-                        $filter: {
-                          input: '$votes',
-                          as: 'vote',
-                          cond: { $eq: ['$$vote._id', VoteType.Upvote] }
-                        }
-                      },
-                      0
-                    ]
+                    $filter: {
+                      input: '$votes',
+                      as: 'vote',
+                      cond: { $eq: ['$$vote._id', VoteType.Upvote] }
+                    }
                   },
-                  { count: 0 }
+                  0
                 ]
               },
-              downvotes: {
-                $ifNull: [
+              { count: 0 }
+            ]
+          },
+          downvotes: {
+            $ifNull: [
+              {
+                $arrayElemAt: [
                   {
-                    $arrayElemAt: [
-                      {
-                        $filter: {
-                          input: '$votes',
-                          as: 'vote',
-                          cond: { $eq: ['$$vote._id', VoteType.Downvote] }
-                        }
-                      },
-                      0
-                    ]
-                  },
-                  { count: 0 }
-                ]
-              }
-            }
-          },
-
-          // Kiểm tra trạng thái vote của người dùng hiện tại
-          {
-            $lookup: {
-              from: 'votes',
-              let: { replyId: '$_id', userId: new ObjectId(user_id) },
-              pipeline: [
-                {
-                  $match: {
-                    $expr: {
-                      $and: [{ $eq: ['$target_id', '$$replyId'] }, { $eq: ['$user_id', '$$userId'] }]
+                    $filter: {
+                      input: '$votes',
+                      as: 'vote',
+                      cond: { $eq: ['$$vote._id', VoteType.Downvote] }
                     }
-                  }
-                },
-                {
-                  $project: {
-                    _id: 0,
-                    type: 1
-                  }
+                  },
+                  0
+                ]
+              },
+              { count: 0 }
+            ]
+          }
+        }
+      },
+
+      // Kiểm tra trạng thái vote của người dùng hiện tại
+      {
+        $lookup: {
+          from: 'votes',
+          let: { replyId: '$_id', userId: new ObjectId(user_id) },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [{ $eq: ['$target_id', '$$replyId'] }, { $eq: ['$user_id', '$$userId'] }]
                 }
-              ],
-              as: 'user_vote'
-            }
-          },
-          {
-            $addFields: {
-              user_vote: {
-                $ifNull: [{ $arrayElemAt: ['$user_vote.type', 0] }, null]
+              }
+            },
+            {
+              $project: {
+                _id: 0,
+                type: 1
               }
             }
-          },
-
-          {
-            $project: {
-              _id: 1,
-              content: 1,
-              question_id: 1,
-              medias: 1,
-              parent_id: 1,
-              created_at: 1,
-              updated_at: 1,
-              user_info: 1,
-              upvotes: 1,
-              downvotes: 1,
-              user_vote: 1,
-              approved_by_user: 1,
-              approved_by_teacher: 1
-            }
-          },
-          {
-            $sort: { created_at: -1 }
-          },
-          {
-            $skip: skip
-          },
-          {
-            $limit: limit
+          ],
+          as: 'user_vote'
+        }
+      },
+      {
+        $addFields: {
+          user_vote: {
+            $ifNull: [{ $arrayElemAt: ['$user_vote.type', 0] }, null]
           }
-        ])
-        .toArray(),
-      databaseService.replies.countDocuments({
-        question_id: new ObjectId(question_id)
-      })
-    ]);
+        }
+      },
 
-    const total_pages = Math.ceil(total / limit);
+      {
+        $project: {
+          _id: 1,
+          content: 1,
+          question_id: 1,
+          medias: 1,
+          parent_id: 1,
+          created_at: 1,
+          updated_at: 1,
+          user_info: 1,
+          upvotes: 1,
+          downvotes: 1,
+          user_vote: 1,
+          approved_by_user: 1,
+          approved_by_teacher: 1
+        }
+      },
+      {
+        $sort: { created_at: -1 }
+      },
+      {
+        $facet: {
+          replies: [{ $skip: skip }, { $limit: limit }],
+          totalCount: [{ $count: 'count' }]
+        }
+      }
+    ];
+
+    const result = await databaseService.replies.aggregate(pipeline).toArray();
+
+    // Extract data from facet results
+    const replies = result[0].replies || [];
+    const totalCount = result[0].totalCount[0]?.count || 0;
+    const total_pages = Math.ceil(totalCount / limit);
 
     return {
-      replies: result.map((r) => ({
+      replies: replies.map((r: any) => ({
         ...r,
         upvotes: r.upvotes.count,
         downvotes: r.downvotes.count,
         user_vote: r.user_vote
       })),
-      total,
+      total: totalCount,
       page,
       limit,
       total_pages
@@ -553,6 +552,189 @@ class RepliesService {
     }
 
     return updatedReply;
+  }
+
+  async getChildReplies({
+    reply_id,
+    user_id,
+    page = 1,
+    limit = 10
+  }: {
+    reply_id: string;
+    user_id: string;
+    page?: number;
+    limit?: number;
+  }) {
+    page = Math.max(1, page);
+    limit = Math.max(1, Math.min(limit, 100));
+    const skip = (page - 1) * limit;
+
+    const [result, total] = await Promise.all([
+      databaseService.replies
+        .aggregate([
+          {
+            $match: {
+              parent_id: new ObjectId(reply_id)
+            }
+          },
+          {
+            $lookup: {
+              from: 'users',
+              localField: 'user_id',
+              foreignField: '_id',
+              pipeline: [
+                {
+                  $project: {
+                    _id: 1,
+                    name: 1,
+                    username: 1,
+                    avatar: 1
+                  }
+                }
+              ],
+              as: 'user_info'
+            }
+          },
+          { $unwind: '$user_info' },
+
+          // Lấy số lượng upvotes và downvotes cho mỗi reply
+          {
+            $lookup: {
+              from: 'votes',
+              let: { replyId: '$_id' },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: { $eq: ['$target_id', '$$replyId'] }
+                  }
+                },
+                {
+                  $group: {
+                    _id: '$type',
+                    count: { $sum: 1 }
+                  }
+                }
+              ],
+              as: 'votes'
+            }
+          },
+          {
+            $addFields: {
+              upvotes: {
+                $ifNull: [
+                  {
+                    $arrayElemAt: [
+                      {
+                        $filter: {
+                          input: '$votes',
+                          as: 'vote',
+                          cond: { $eq: ['$$vote._id', VoteType.Upvote] }
+                        }
+                      },
+                      0
+                    ]
+                  },
+                  { count: 0 }
+                ]
+              },
+              downvotes: {
+                $ifNull: [
+                  {
+                    $arrayElemAt: [
+                      {
+                        $filter: {
+                          input: '$votes',
+                          as: 'vote',
+                          cond: { $eq: ['$$vote._id', VoteType.Downvote] }
+                        }
+                      },
+                      0
+                    ]
+                  },
+                  { count: 0 }
+                ]
+              }
+            }
+          },
+
+          // Kiểm tra trạng thái vote của người dùng hiện tại
+          {
+            $lookup: {
+              from: 'votes',
+              let: { replyId: '$_id', userId: new ObjectId(user_id) },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: {
+                      $and: [{ $eq: ['$target_id', '$$replyId'] }, { $eq: ['$user_id', '$$userId'] }]
+                    }
+                  }
+                },
+                {
+                  $project: {
+                    _id: 0,
+                    type: 1
+                  }
+                }
+              ],
+              as: 'user_vote'
+            }
+          },
+          {
+            $addFields: {
+              user_vote: {
+                $ifNull: [{ $arrayElemAt: ['$user_vote.type', 0] }, null]
+              }
+            }
+          },
+
+          {
+            $project: {
+              _id: 1,
+              content: 1,
+              question_id: 1,
+              medias: 1,
+              parent_id: 1,
+              created_at: 1,
+              updated_at: 1,
+              user_info: 1,
+              upvotes: 1,
+              downvotes: 1,
+              user_vote: 1,
+              approved_by_user: 1,
+              approved_by_teacher: 1
+            }
+          },
+          {
+            $sort: { created_at: -1 }
+          },
+          {
+            $skip: skip
+          },
+          {
+            $limit: limit
+          }
+        ])
+        .toArray(),
+      databaseService.replies.countDocuments({
+        parent_id: new ObjectId(reply_id)
+      })
+    ]);
+
+    const total_pages = Math.ceil(total / limit);
+
+    return {
+      replies: result.map((r) => ({
+        ...r,
+        upvotes: r.upvotes.count,
+        downvotes: r.downvotes.count,
+        user_vote: r.user_vote
+      })),
+      total,
+      page,
+      limit,
+      total_pages
+    };
   }
 }
 

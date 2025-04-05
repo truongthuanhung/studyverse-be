@@ -1,13 +1,24 @@
-import { ObjectId, WithId } from 'mongodb';
-import { InteractionType, LikeType } from '~/constants/enums';
-import HTTP_STATUS from '~/constants/httpStatus';
-import { ErrorWithStatus } from '~/models/Errors';
+import { ObjectId } from 'mongodb';
+import { InteractionType, LikeType, NotificationType } from '~/constants/enums';
 import { LikeRequestBody } from '~/models/requests/Like.requests';
 import Like from '~/models/schemas/Like.schema';
 import databaseService from '~/services/database.services';
 import tagsService from './tags.services';
+import notificationsService from './notifications.services';
 
 class LikeService {
+  private sendLikeNotification(actor_id: string, user_id: string, post_id: string) {
+    // Không cần await
+    notificationsService.createNotification({
+      user_id,
+      actor_id,
+      reference_id: post_id,
+      type: NotificationType.Personal,
+      content: 'has liked your post',
+      target_url: `/posts/${post_id}`
+    });
+  }
+
   async like(user_id: string, body: LikeRequestBody) {
     const { target_id, type } = body;
     const userId = new ObjectId(user_id);
@@ -47,6 +58,9 @@ class LikeService {
             post.tags.forEach((tagId: ObjectId) => {
               tagsService.addUserTagInteraction({ user_id, tag_id: tagId.toString(), type: InteractionType.Like });
             });
+          }
+          if (post && !post.user_id.equals(userId)) {
+            this.sendLikeNotification(user_id, post.user_id.toString(), targetId.toString());
           }
         }
       }

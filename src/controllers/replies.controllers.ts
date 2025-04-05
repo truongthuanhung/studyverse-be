@@ -168,3 +168,23 @@ export const approveReplyByQuestionOwnerController = async (req: Request, res: R
     result
   });
 };
+
+export const getChildRepliesController = async (req: Request, res: Response) => {
+  const { reply_id } = req.params;
+  const { page = '1', limit = '10' } = req.query;
+
+  const { user_id } = req.decoded_authorization as TokenPayload;
+
+  const pageNumber = parseInt(page as string);
+  const limitNumber = parseInt(limit as string);
+  const result = await repliesService.getChildReplies({
+    user_id,
+    reply_id,
+    page: pageNumber,
+    limit: limitNumber
+  });
+  return res.json({
+    message: 'Get child replies successfully',
+    result
+  });
+};

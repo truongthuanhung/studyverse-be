@@ -29,6 +29,9 @@ import searchRouter from './routes/search.routes';
 //import '~/utils/faker.questions';
 //import '~/utils/create_groups.faker';
 //import '~/utils/notifications.faker';
+//import '~/scripts/friendTagPosts.faker'
+//import '~/scripts/strangerTagPost.faker'
+//import '~/scripts/childReplies.faker';
 config();
 
 const port = process.env.PORT || 3003;

@@ -6,6 +6,7 @@ import {
   deleteReplyController,
   downvoteReplyController,
   editReplyController,
+  getChildRepliesController,
   getRepliesByQuestionIdController,
   getReplyByIdController,
   unvoteReplyController,
@@ -43,6 +44,14 @@ repliesRouter.get(
   validateGroupQuestionAndMembership,
   paginationValidator,
   wrapRequestHandler(getRepliesByQuestionIdController)
+);
+
+repliesRouter.get(
+  '/:reply_id/child-replies',
+  accessTokenValidator,
+  validateGroupQuestionReplyAndMembership,
+  paginationValidator,
+  wrapRequestHandler(getChildRepliesController)
 );
 
 repliesRouter.post(

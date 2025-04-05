@@ -5,9 +5,69 @@ import { ClientSession, ObjectId } from 'mongodb';
 import { ErrorWithStatus } from '~/models/Errors';
 import HTTP_STATUS from '~/constants/httpStatus';
 import tagsService from './tags.services';
-import { InteractionType } from '~/constants/enums';
+import { InteractionType, NotificationType } from '~/constants/enums';
+import notificationsService from './notifications.services';
+import postsService from './posts.services';
 
 class CommentsService {
+  private sendCommentNotification(actor_id: string, user_id: string, post_id: string) {
+    notificationsService.createNotification({
+      user_id,
+      actor_id,
+      reference_id: post_id,
+      type: NotificationType.Personal,
+      content: 'has commented on your post',
+      target_url: `/posts/${post_id}`
+    });
+  }
+
+  async getCommentById(comment_id: string) {
+    const [result] = await databaseService.comments
+      .aggregate([
+        {
+          $match: { _id: new ObjectId(comment_id) }
+        },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'user_id',
+            foreignField: '_id',
+            pipeline: [
+              {
+                $project: {
+                  _id: 1,
+                  name: 1,
+                  username: 1,
+                  avatar: 1
+                }
+              }
+            ],
+            as: 'user_info'
+          }
+        },
+        {
+          $unwind: '$user_info'
+        },
+        {
+          $project: {
+            _id: 1,
+            content: 1,
+            post_id: 1,
+            parent_id: 1,
+            created_at: 1,
+            updated_at: 1,
+            user_info: 1
+          }
+        }
+      ])
+      .toArray();
+    if (!result) {
+      return null;
+    }
+
+    return result;
+  }
+
   async checkCommentExists(comment_id: string) {
     const comment = await databaseService.comments.findOne({ _id: new ObjectId(comment_id) });
     if (!comment) {
@@ -16,102 +76,61 @@ class CommentsService {
   }
 
   async commentOnPost(user_id: string, body: CreateCommentRequestBody) {
-    // Khởi tạo session
     const session = databaseService.client.startSession();
-
     try {
-      // Bắt đầu transaction
-      let comment, comment_count;
+      let postOwner: ObjectId | null = null;
+      let comment_id: ObjectId | null = null;
 
       await session.withTransaction(async () => {
-        const commentData = new Comment({
-          ...body,
-          user_id: new ObjectId(user_id),
-          post_id: new ObjectId(body.post_id),
-          parent_id: body.parent_id ? new ObjectId(body.parent_id) : null
-        });
-
-        // Tạo comment mới trong transaction
-        const result = await databaseService.comments.insertOne(commentData, { session });
+        const result = await databaseService.comments.insertOne(
+          new Comment({
+            ...body,
+            user_id: new ObjectId(user_id),
+            post_id: new ObjectId(body.post_id),
+            parent_id: body.parent_id ? new ObjectId(body.parent_id) : null
+          }),
+          { session }
+        );
 
         if (!result.insertedId) {
           throw new Error('Failed to create comment');
         }
 
-        // Tăng comment_count của bài viết lên 1 trong transaction
+        comment_id = result.insertedId;
+
         await databaseService.posts.updateOne(
           { _id: new ObjectId(body.post_id) },
           { $inc: { comment_count: 1 } },
           { session }
         );
-
-        // Lấy thông tin comment vừa được tạo
-        const [commentResult] = await databaseService.comments
-          .aggregate(
-            [
-              {
-                $match: { _id: result.insertedId }
-              },
-              {
-                $lookup: {
-                  from: 'users',
-                  localField: 'user_id',
-                  foreignField: '_id',
-                  pipeline: [
-                    {
-                      $project: {
-                        _id: 1,
-                        name: 1,
-                        username: 1,
-                        avatar: 1
-                      }
-                    }
-                  ],
-                  as: 'user_info'
-                }
-              },
-              {
-                $unwind: '$user_info'
-              },
-              {
-                $project: {
-                  _id: 1,
-                  content: 1,
-                  post_id: 1,
-                  parent_id: 1,
-                  created_at: 1,
-                  updated_at: 1,
-                  user_info: 1
-                }
-              }
-            ],
-            { session }
-          )
-          .toArray();
-
-        // Đếm số lượng comment cho bài viết
-        const commentCountResult = await databaseService.comments.countDocuments(
-          { post_id: new ObjectId(body.post_id) },
-          { session }
-        );
-
-        const post = await databaseService.posts.findOne({ _id: new ObjectId(body.post_id) }, { session });
-
-        if (post?.tags?.length) {
-          post.tags.forEach((tagId: ObjectId) => {
-            tagsService.addUserTagInteraction({
-              user_id,
-              tag_id: tagId.toString(),
-              type: InteractionType.Comment
-            });
-          });
-        }
-
-        comment = commentResult;
-        comment_count = commentCountResult;
       });
 
-      return { comment, comment_count };
+      if (!comment_id) {
+        throw new Error('Comment ID is null after transaction');
+      }
+
+      const [newComment, post, user] = await Promise.all([
+        databaseService.comments.findOne({ _id: comment_id as ObjectId }),
+        databaseService.posts.findOne({ _id: new ObjectId(body.post_id) }),
+        databaseService.users.findOne(
+          { _id: new ObjectId(user_id) },
+          {
+            projection: { _id: 1, name: 1, username: 1, avatar: 1 },
+            session
+          }
+        )
+      ]);
+
+      const comment = {
+        ...newComment,
+        user_info: user
+      };
+
+      if (postOwner && !(postOwner as ObjectId).equals(new ObjectId(user_id))) {
+        this.sendCommentNotification(user_id, (postOwner as ObjectId).toString(), body.post_id);
+      }
+
+      return { comment, post };
     } catch (error) {
       throw error;
     } finally {

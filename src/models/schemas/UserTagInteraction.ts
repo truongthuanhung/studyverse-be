@@ -1,5 +1,4 @@
 import { ObjectId } from 'mongodb';
-import { InteractionType } from '~/constants/enums';
 
 interface IUserTagInteraction {
   user_id: ObjectId;

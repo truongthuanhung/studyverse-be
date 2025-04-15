@@ -5,6 +5,8 @@ import Like from '~/models/schemas/Like.schema';
 import databaseService from '~/services/database.services';
 import tagsService from './tags.services';
 import notificationsService from './notifications.services';
+import { ErrorWithStatus } from '~/models/Errors';
+import HTTP_STATUS from '~/constants/httpStatus';
 
 class LikeService {
   private sendLikeNotification(actor_id: string, user_id: string, post_id: string) {
@@ -24,91 +26,64 @@ class LikeService {
     const userId = new ObjectId(user_id);
     const targetId = new ObjectId(target_id);
 
-    const session = databaseService.client.startSession();
-    try {
-      session.startTransaction();
+    const existingLike = await databaseService.likes.findOne({
+      user_id: userId,
+      target_id: targetId
+    });
 
-      const result = await databaseService.likes.findOneAndUpdate(
-        {
-          user_id: userId,
-          target_id: targetId
-        },
-        {
-          $setOnInsert: new Like({
-            user_id: userId,
-            target_id: targetId,
-            type
-          })
-        },
-        {
-          upsert: true,
-          returnDocument: 'after',
-          session
-        }
-      );
-
-      if (result) {
-        const targetCollection = type === LikeType.PostLike ? databaseService.posts : databaseService.comments;
-        await targetCollection.updateOne({ _id: targetId }, { $inc: { like_count: 1 } }, { session });
-
-        // Gọi addUserTagInteraction nhưng không chờ kết quả
-        if (type === LikeType.PostLike) {
-          const post = await databaseService.posts.findOne({ _id: targetId });
-          if (post?.tags?.length) {
-            post.tags.forEach((tagId: ObjectId) => {
-              tagsService.addUserTagInteraction({ user_id, tag_id: tagId.toString(), type: InteractionType.Like });
-            });
-          }
-          if (post && !post.user_id.equals(userId)) {
-            this.sendLikeNotification(user_id, post.user_id.toString(), targetId.toString());
-          }
-        }
-      }
-
-      const like_count = await databaseService.likes.countDocuments({ target_id: targetId }, { session });
-
-      await session.commitTransaction();
-      return like_count;
-    } catch (error) {
-      await session.abortTransaction();
-      throw error;
-    } finally {
-      session.endSession();
+    if (existingLike) {
+      throw new ErrorWithStatus({
+        message: 'Already liked',
+        status: HTTP_STATUS.CONFLICT
+      });
     }
+    const targetCollection = type === LikeType.PostLike ? databaseService.posts : databaseService.comments;
+
+    await Promise.all([
+      databaseService.likes.insertOne(
+        new Like({
+          user_id: userId,
+          target_id: targetId,
+          type
+        })
+      ),
+      targetCollection.updateOne({ _id: targetId }, { $inc: { like_count: 1 } })
+    ]);
+
+    if (type === LikeType.PostLike) {
+      const post = await databaseService.posts.findOne({ _id: targetId });
+      if (post?.tags?.length) {
+        post.tags.forEach((tagId: ObjectId) => {
+          tagsService.addUserTagInteraction({ user_id, tag_id: tagId.toString(), type: InteractionType.Like });
+        });
+      }
+      if (post && !post.user_id.equals(userId)) {
+        this.sendLikeNotification(user_id, post.user_id.toString(), targetId.toString());
+      }
+    }
+
+    return await targetCollection.findOne({ _id: targetId });
   }
 
   async unlike(user_id: string, target_id: string) {
     const userId = new ObjectId(user_id);
     const targetId = new ObjectId(target_id);
+    const deletedLike = await databaseService.likes.findOneAndDelete({
+      user_id: userId,
+      target_id: targetId
+    });
 
-    const session = databaseService.client.startSession();
-    try {
-      session.startTransaction();
-
-      const deletedLike = await databaseService.likes.findOneAndDelete(
-        {
-          user_id: userId,
-          target_id: targetId
-        },
-        { session }
-      );
-
-      if (deletedLike) {
-        const type = deletedLike.type;
-        const targetCollection = type === LikeType.PostLike ? databaseService.posts : databaseService.comments;
-        await targetCollection.updateOne({ _id: targetId }, { $inc: { like_count: -1 } }, { session });
-      }
-
-      const like_count = await databaseService.likes.countDocuments({ target_id: targetId }, { session });
-
-      await session.commitTransaction();
-      return like_count;
-    } catch (error) {
-      await session.abortTransaction();
-      throw error;
-    } finally {
-      session.endSession();
+    if (!deletedLike) {
+      throw new ErrorWithStatus({
+        message: 'Like not found',
+        status: HTTP_STATUS.NOT_FOUND
+      });
     }
+    const type = deletedLike.type;
+    const targetCollection = type === LikeType.PostLike ? databaseService.posts : databaseService.comments;
+    await targetCollection.updateOne({ _id: targetId }, { $inc: { like_count: -1 } });
+    const targetDocument = await targetCollection.findOne({ _id: targetId });
+    return targetDocument;
   }
 
   async getLikesByPostId(post_id: string, page: number = 1, limit: number = 20) {

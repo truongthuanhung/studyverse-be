@@ -9,6 +9,7 @@ interface IReply {
   content: string;
   upvotes?: number;
   downvotes?: number;
+  reply_count?: number;
   approved_by_user?: boolean;
   approved_by_teacher?: boolean;
   created_at?: Date;
@@ -24,6 +25,7 @@ export default class Reply {
   content: string;
   upvotes: number;
   downvotes: number;
+  reply_count: number;
   approved_by_user: boolean;
   approved_by_teacher: boolean;
   created_at?: Date;
@@ -37,6 +39,7 @@ export default class Reply {
     content,
     upvotes,
     downvotes,
+    reply_count,
     approved_by_user,
     approved_by_teacher,
     created_at,
@@ -51,6 +54,7 @@ export default class Reply {
     this.content = content;
     this.upvotes = upvotes || 0;
     this.downvotes = downvotes || 0;
+    this.reply_count = reply_count || 0;
     this.approved_by_user = approved_by_user || false;
     this.approved_by_teacher = approved_by_teacher || false;
     this.created_at = created_at || date;

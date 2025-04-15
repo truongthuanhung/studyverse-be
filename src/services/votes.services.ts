@@ -175,7 +175,7 @@ class VotesService {
     });
 
     // Tạo hoặc cập nhật vote thành upvote
-    const voteOperation = await databaseService.votes.findOneAndUpdate(
+    await databaseService.votes.findOneAndUpdate(
       { user_id: userObjectId, target_id: targetObjectId },
       { $set: { type: VoteType.Upvote, target_type } },
       { returnDocument: 'after', upsert: true }
@@ -221,7 +221,21 @@ class VotesService {
       });
     }
 
-    return voteOperation;
+    const result = await targetCollection.findOne(
+      {
+        _id: targetObjectId
+      },
+      {
+        projection: {
+          upvotes: 1,
+          downvotes: 1,
+          reply_count: 1,
+          parent_id: 1
+        }
+      }
+    );
+
+    return result;
   }
 
   async downvote({
@@ -293,7 +307,21 @@ class VotesService {
       });
     }
 
-    return voteOperation;
+    const result = await targetCollection.findOne(
+      {
+        _id: targetObjectId
+      },
+      {
+        projection: {
+          upvotes: 1,
+          downvotes: 1,
+          reply_count: 1,
+          parent_id: 1
+        }
+      }
+    );
+
+    return result;
   }
 
   // Phương thức unvote giữ nguyên như cũ
@@ -358,7 +386,21 @@ class VotesService {
         })
     ]);
 
-    return { success: true, previousVoteType: deletedVote.type };
+    const result = await targetCollection.findOne(
+      {
+        _id: targetObjectId
+      },
+      {
+        projection: {
+          upvotes: 1,
+          downvotes: 1,
+          reply_count: 1,
+          parent_id: 1
+        }
+      }
+    );
+
+    return result;
   }
 }
 

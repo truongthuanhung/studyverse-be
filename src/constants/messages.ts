@@ -134,3 +134,12 @@ export const SEARCH_MESSAGES = {
   DELETE_HISTORY_SUCCESS: 'Search history deleted successfully',
   HISTORY_NOT_FOUND: 'Search history not found'
 } as const;
+
+export const USER_NOTIFICATIONS = {
+  UPVOTE_QUESTION: 'has upvoted your question',
+  DOWNVOTE_QUESTION: 'has downvoted your question',
+  UPVOTE_REPLY: 'has upvoted your reply',
+  DOWNVOTE_REPLY: 'has downvoted your reply',
+  REPLY_QUESTION: 'has replied your question',
+  REPLY_ON_REPLY: 'has replied your reply'
+};

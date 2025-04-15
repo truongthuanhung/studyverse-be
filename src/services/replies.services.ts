@@ -48,13 +48,19 @@ class RepliesService {
     // Thực hiện song song:
     // 1. Lưu reply mới
     // 2. Cập nhật reply_count trong question và lấy thông tin question
-    const [insertResult, question] = await Promise.all([
+    const [insertResult, question, _] = await Promise.all([
       databaseService.replies.insertOne(newReply),
       databaseService.questions.findOneAndUpdate(
         { _id: questionObjectId },
         { $inc: { reply_count: 1 } },
         { returnDocument: 'after' }
-      )
+      ),
+      newReply.parent_id !== null &&
+        databaseService.replies.findOneAndUpdate(
+          { _id: new ObjectId(newReply.parent_id) },
+          { $inc: { reply_count: 1 } },
+          { returnDocument: 'after' }
+        )
     ]);
 
     if (!insertResult.insertedId) {
@@ -99,10 +105,15 @@ class RepliesService {
       created_at: newReply.created_at,
       updated_at: newReply.updated_at,
       user_info: user,
-      reply_count: question ? question.reply_count : 1,
+      reply_count: 0,
       upvotes: 0,
       downvotes: 0,
-      user_vote: null
+      user_vote: null,
+      question_info: {
+        reply_count: question?.reply_count,
+        upvotes: question?.upvotes,
+        downvotes: question?.downvotes
+      }
     };
   }
 
@@ -221,66 +232,6 @@ class RepliesService {
       },
       { $unwind: '$user_info' },
 
-      // Lấy số lượng upvotes và downvotes cho mỗi reply
-      {
-        $lookup: {
-          from: 'votes',
-          let: { replyId: '$_id' },
-          pipeline: [
-            {
-              $match: {
-                $expr: { $eq: ['$target_id', '$$replyId'] }
-              }
-            },
-            {
-              $group: {
-                _id: '$type',
-                count: { $sum: 1 }
-              }
-            }
-          ],
-          as: 'votes'
-        }
-      },
-      {
-        $addFields: {
-          upvotes: {
-            $ifNull: [
-              {
-                $arrayElemAt: [
-                  {
-                    $filter: {
-                      input: '$votes',
-                      as: 'vote',
-                      cond: { $eq: ['$$vote._id', VoteType.Upvote] }
-                    }
-                  },
-                  0
-                ]
-              },
-              { count: 0 }
-            ]
-          },
-          downvotes: {
-            $ifNull: [
-              {
-                $arrayElemAt: [
-                  {
-                    $filter: {
-                      input: '$votes',
-                      as: 'vote',
-                      cond: { $eq: ['$$vote._id', VoteType.Downvote] }
-                    }
-                  },
-                  0
-                ]
-              },
-              { count: 0 }
-            ]
-          }
-        }
-      },
-
       // Kiểm tra trạng thái vote của người dùng hiện tại
       {
         $lookup: {
@@ -325,6 +276,7 @@ class RepliesService {
           upvotes: 1,
           downvotes: 1,
           user_vote: 1,
+          reply_count: 1,
           approved_by_user: 1,
           approved_by_teacher: 1
         }
@@ -348,12 +300,7 @@ class RepliesService {
     const total_pages = Math.ceil(totalCount / limit);
 
     return {
-      replies: replies.map((r: any) => ({
-        ...r,
-        upvotes: r.upvotes.count,
-        downvotes: r.downvotes.count,
-        user_vote: r.user_vote
-      })),
+      replies,
       total: totalCount,
       page,
       limit,

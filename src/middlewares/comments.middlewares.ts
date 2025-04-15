@@ -37,7 +37,10 @@ export const createCommentValidator = validate(
             const comment = await databaseService.comments.findOne({
               _id: new ObjectId(value)
             });
-            if (!comment || comment.post_id.toString() !== req.body.post_id || comment.parent_id !== null) {
+
+            console.log(comment?.post_id);
+            console.log(req.post._id);
+            if (!comment || !comment.post_id.equals(req.post._id) || comment.parent_id !== null) {
               throw new ErrorWithStatus({
                 message: 'Invalid parent id',
                 status: HTTP_STATUS.BAD_REQUEST

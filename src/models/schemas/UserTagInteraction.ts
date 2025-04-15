@@ -11,7 +11,7 @@ interface IUserTagInteraction {
 class UserTagInteraction {
   user_id: ObjectId;
   tag_id: ObjectId;
-  interaction_score?: number;
+  interaction_score: number;
   created_at: Date;
   last_interacted_at: Date;
 

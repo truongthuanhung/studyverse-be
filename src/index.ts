@@ -32,6 +32,8 @@ import searchRouter from './routes/search.routes';
 //import '~/scripts/friendTagPosts.faker'
 //import '~/scripts/strangerTagPost.faker'
 //import '~/scripts/childReplies.faker';
+//import '~/scripts/groupUsers.faker';
+//import '~/scripts/childComments.faker';
 config();
 
 const port = process.env.PORT || 3003;

@@ -73,8 +73,8 @@ export const getQuestionByIdController = async (req: Request, res: Response) => 
 };
 
 export const getQuestionsByGroupIdController = async (req: Request, res: Response) => {
-  const { group_id } = req.params; //?page=1&limit=10
-  const { page = '1', limit = '10', sortBy = 'newest', status = '0' } = req.query;
+  const { group_id } = req.params;
+  const { page = '1', limit = '10', sortBy = 'newest', status = '0', tag_id } = req.query;
 
   const pageNumber = parseInt(page as string, 10);
   const limitNumber = parseInt(limit as string, 10);
@@ -99,7 +99,8 @@ export const getQuestionsByGroupIdController = async (req: Request, res: Respons
     page: pageNumber,
     limit: limitNumber,
     sortBy: validatedSortBy,
-    status: statusNumber
+    status: statusNumber,
+    tag_id: tag_id as string | undefined
   });
 
   return res.status(HTTP_STATUS.OK).json({

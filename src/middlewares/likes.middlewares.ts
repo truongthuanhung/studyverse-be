@@ -23,9 +23,11 @@ export const likeValidator = validate(
         custom: {
           options: async (value: string, { req }) => {
             if (req.body.type === LikeType.PostLike) {
-              await postsService.checkPostExists(value);
+              const post = await postsService.checkPostExists(value);
+              req.post = post;
             } else if (req.body.type === LikeType.CommentLike) {
-              await commentsService.checkCommentExists(value);
+              const comment = await commentsService.checkCommentExists(value);
+              req.comment = comment;
             }
             return true;
           }

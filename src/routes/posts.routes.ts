@@ -1,5 +1,6 @@
 import { post } from 'axios';
 import { Router } from 'express';
+import { likeController } from '~/controllers/likes.controllers';
 import {
   createPostController,
   getMyPostsController,
@@ -8,6 +9,7 @@ import {
   getPostsByUserIdController,
   sharePostController
 } from '~/controllers/posts.controllers';
+import { likeValidator } from '~/middlewares/likes.middlewares';
 import {
   createPostValidator,
   postIdParamValidator,
@@ -16,6 +18,7 @@ import {
 } from '~/middlewares/posts.middlewares';
 import { accessTokenValidator, userIdParamValidator } from '~/middlewares/users.middlewares';
 import { wrapRequestHandler } from '~/utils/handlers';
+import commentsRouter from './comments.routes';
 
 const postsRouter = Router();
 
@@ -48,5 +51,9 @@ postsRouter.post(
   privacyValidator,
   wrapRequestHandler(sharePostController)
 );
+
+postsRouter.post('/:post_id/like', accessTokenValidator, wrapRequestHandler(likeController));
+
+postsRouter.use('/:post_id/comments', commentsRouter);
 
 export default postsRouter;

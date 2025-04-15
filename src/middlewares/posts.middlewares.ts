@@ -177,16 +177,7 @@ export const sharePostValidator = validate(
         isString: {
           errorMessage: 'Content must be a string'
         },
-        trim: true,
-        custom: {
-          options: (value: string, { req }) => {
-            const type = req.body.type as PostType;
-            if (type !== PostType.Post && !value) {
-              throw new Error('Content is required');
-            }
-            return true;
-          }
-        }
+        trim: true
       },
       privacy: {
         isIn: {
@@ -194,22 +185,8 @@ export const sharePostValidator = validate(
           errorMessage: 'Invalid post privacy'
         }
       },
-      parent_id: {
-        isMongoId: {
-          errorMessage: 'Parent id must be a valid id when sharing a post'
-        },
-        custom: {
-          options: async (value: string, { req }) => {
-            const post = await postsService.checkPostExists(value);
-            if (post.type !== PostType.Post) {
-              throw new ErrorWithStatus({ message: 'Parent id must be a post', status: HTTP_STATUS.BAD_REQUEST });
-            }
-            req.post = post;
-            return true;
-          }
-        }
-      },
       mentions: {
+        optional: true,
         isArray: true,
         custom: {
           options: (value) => {

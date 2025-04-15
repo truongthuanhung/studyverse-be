@@ -5,56 +5,43 @@ import UserBadge from '~/models/schemas/UserBadge.schema';
 
 class BadgesService {
   async awardBadgeIfEligible(member: StudyGroupMember, session?: ClientSession) {
-    const userPoint = member.points;
+    const userPoints = member.points;
 
-    // Find the highest badge the user is eligible for based on points
+    // Tìm badge cao nhất mà user đủ điều kiện
     const highestEligibleBadge = await databaseService.badges
-      .find({ points_required: { $lte: userPoint } })
-      .sort({ points_required: -1 }) // Sort by points in descending order to get the highest badge first
+      .find({ points_required: { $lte: userPoints } })
+      .sort({ points_required: -1 })
       .limit(1)
       .toArray()
       .then((badges) => badges[0]);
 
     if (!highestEligibleBadge) {
-      return null; // No eligible badges found
+      return null; // Không có badge nào phù hợp
     }
 
-    // Check if the user already has this exact badge
-    const existingBadge = await databaseService.user_badges.findOne(
-      {
-        user_id: member.user_id,
-        group_id: member.group_id,
-        badge_id: highestEligibleBadge._id
-      },
-      { session }
+    // Kiểm tra xem user đã có badge này chưa
+    const hasBadge = member.badges.some(
+      (badge) => badge._id && badge._id.toString() === highestEligibleBadge._id.toString()
     );
 
-    // If the user already has this badge, no need to do anything
-    if (existingBadge) {
-      return null;
+    if (hasBadge) {
+      return null; // Người dùng đã có badge này, không cần cấp lại
     }
 
-    // Remove all existing badges for this user in this group
-    await databaseService.user_badges.deleteMany(
+    // Cập nhật danh sách badge
+    const updatedMember = await databaseService.study_group_members.findOneAndUpdate(
+      { _id: member._id },
       {
-        user_id: member.user_id,
-        group_id: member.group_id
+        $addToSet: { badges: highestEligibleBadge }, // Đảm bảo không thêm trùng lặp
+        $set: { updated_at: new Date() }
       },
-      { session }
+      {
+        session,
+        returnDocument: 'after'
+      }
     );
 
-    // Create a new UserBadge record for the highest eligible badge
-    const newUserBadge = new UserBadge({
-      user_id: member.user_id,
-      group_id: member.group_id,
-      badge_id: highestEligibleBadge._id
-    });
-
-    // Save the new UserBadge record to the database
-    await databaseService.user_badges.insertOne(newUserBadge, { session });
-
-    // Return the newly awarded badge
-    return highestEligibleBadge;
+    return updatedMember ? highestEligibleBadge : null;
   }
 
   // Phương thức lấy tất cả huy hiệu của người dùng trong một nhóm học tập

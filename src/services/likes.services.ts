@@ -1,51 +1,89 @@
-import { ObjectId, WithId } from 'mongodb';
-import { LikeType } from '~/constants/enums';
-import HTTP_STATUS from '~/constants/httpStatus';
-import { ErrorWithStatus } from '~/models/Errors';
+import { ObjectId } from 'mongodb';
+import { InteractionType, LikeType, NotificationType } from '~/constants/enums';
 import { LikeRequestBody } from '~/models/requests/Like.requests';
 import Like from '~/models/schemas/Like.schema';
 import databaseService from '~/services/database.services';
-import usersService from './users.services';
+import tagsService from './tags.services';
+import notificationsService from './notifications.services';
+import { ErrorWithStatus } from '~/models/Errors';
+import HTTP_STATUS from '~/constants/httpStatus';
 
 class LikeService {
+  private sendLikeNotification(actor_id: string, user_id: string, post_id: string) {
+    // Không cần await
+    notificationsService.createNotification({
+      user_id,
+      actor_id,
+      reference_id: post_id,
+      type: NotificationType.Personal,
+      content: 'has liked your post',
+      target_url: `/posts/${post_id}`
+    });
+  }
+
   async like(user_id: string, body: LikeRequestBody) {
     const { target_id, type } = body;
+    const userId = new ObjectId(user_id);
+    const targetId = new ObjectId(target_id);
 
-    await databaseService.likes.findOneAndUpdate(
-      {
-        user_id: new ObjectId(user_id),
-        target_id: new ObjectId(target_id)
-      },
-      {
-        $setOnInsert: new Like({
-          user_id: new ObjectId(user_id),
-          target_id: new ObjectId(target_id),
-          type
-        })
-      },
-      {
-        upsert: true
-      }
-    );
-
-    const like_count = await databaseService.likes.countDocuments({
-      target_id: new ObjectId(target_id)
+    const existingLike = await databaseService.likes.findOne({
+      user_id: userId,
+      target_id: targetId
     });
 
-    return like_count;
+    if (existingLike) {
+      throw new ErrorWithStatus({
+        message: 'Already liked',
+        status: HTTP_STATUS.CONFLICT
+      });
+    }
+    const targetCollection = type === LikeType.PostLike ? databaseService.posts : databaseService.comments;
+
+    await Promise.all([
+      databaseService.likes.insertOne(
+        new Like({
+          user_id: userId,
+          target_id: targetId,
+          type
+        })
+      ),
+      targetCollection.updateOne({ _id: targetId }, { $inc: { like_count: 1 } })
+    ]);
+
+    if (type === LikeType.PostLike) {
+      const post = await databaseService.posts.findOne({ _id: targetId });
+      if (post?.tags?.length) {
+        post.tags.forEach((tagId: ObjectId) => {
+          tagsService.addUserTagInteraction({ user_id, tag_id: tagId.toString(), type: InteractionType.Like });
+        });
+      }
+      if (post && !post.user_id.equals(userId)) {
+        this.sendLikeNotification(user_id, post.user_id.toString(), targetId.toString());
+      }
+    }
+
+    return await targetCollection.findOne({ _id: targetId });
   }
 
   async unlike(user_id: string, target_id: string) {
-    await databaseService.likes.findOneAndDelete({
-      user_id: new ObjectId(user_id),
-      target_id: new ObjectId(target_id)
+    const userId = new ObjectId(user_id);
+    const targetId = new ObjectId(target_id);
+    const deletedLike = await databaseService.likes.findOneAndDelete({
+      user_id: userId,
+      target_id: targetId
     });
 
-    const like_count = await databaseService.likes.countDocuments({
-      target_id: new ObjectId(target_id)
-    });
-
-    return like_count;
+    if (!deletedLike) {
+      throw new ErrorWithStatus({
+        message: 'Like not found',
+        status: HTTP_STATUS.NOT_FOUND
+      });
+    }
+    const type = deletedLike.type;
+    const targetCollection = type === LikeType.PostLike ? databaseService.posts : databaseService.comments;
+    await targetCollection.updateOne({ _id: targetId }, { $inc: { like_count: -1 } });
+    const targetDocument = await targetCollection.findOne({ _id: targetId });
+    return targetDocument;
   }
 
   async getLikesByPostId(post_id: string, page: number = 1, limit: number = 20) {

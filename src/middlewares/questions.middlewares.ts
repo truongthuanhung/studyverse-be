@@ -1,11 +1,14 @@
 import { NextFunction, Request, Response } from 'express';
 import { checkSchema } from 'express-validator';
+import { ObjectId } from 'mongodb';
 import { GroupTargetType, QuestionStatus, VoteType } from '~/constants/enums';
 import HTTP_STATUS from '~/constants/httpStatus';
 import { QUESTION_MESSAGES } from '~/constants/messages';
 import { ErrorWithStatus } from '~/models/Errors';
 import { numberEnumToArray } from '~/utils/common';
 import { validate } from '~/utils/validation';
+
+const questionStatus = numberEnumToArray(QuestionStatus);
 
 export const getQuestionsValidator = validate(
   checkSchema(
@@ -31,6 +34,18 @@ export const getQuestionsValidator = validate(
         isIn: {
           options: [['newest', 'oldest']],
           errorMessage: 'sortBy must be either "newest" or "oldest"'
+        }
+      },
+      tag_id: {
+        optional: true,
+        isMongoId: {
+          errorMessage: 'tag_id must be a valid mongoId'
+        }
+      },
+      status: {
+        isIn: {
+          options: [questionStatus],
+          errorMessage: 'Invalid question status'
         }
       }
     },

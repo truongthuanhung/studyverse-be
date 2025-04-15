@@ -119,12 +119,6 @@ export const voteReplyValidator = validate(
           req.reply = reply;
         }
       }
-    },
-    type: {
-      isIn: {
-        options: [[VoteType.Upvote, VoteType.Downvote]],
-        errorMessage: 'Type must be Upvote or Downvote'
-      }
     }
   })
 );

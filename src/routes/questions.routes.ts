@@ -13,16 +13,13 @@ import { filterMiddleware } from '~/middlewares/common.middlewares';
 import {
   approveQuestionValidator,
   getQuestionsValidator,
-  rejectQuestionValidator,
-  voteQuestionValidator
+  rejectQuestionValidator
 } from '~/middlewares/questions.middlewares';
 import {
   adminValidator,
   createQuestionValidator,
   deleteQuestionValidator,
   editQuestionValidator,
-  groupIdValidator,
-  groupMemberValidator,
   questionOwnerValidator,
   validateGroupMembership,
   validateGroupQuestionAndMembership
@@ -30,7 +27,11 @@ import {
 import { accessTokenValidator } from '~/middlewares/users.middlewares';
 import { wrapRequestHandler } from '~/utils/handlers';
 import repliesRouter from './replies.routes';
-import { voteQuestionController } from '~/controllers/votes.controllers';
+import {
+  downvoteQuestionController,
+  unvoteQuestionController,
+  upvoteQuestionController
+} from '~/controllers/votes.controllers';
 
 const questionsRouter = Router({ mergeParams: true });
 
@@ -45,8 +46,7 @@ questionsRouter.post(
 questionsRouter.get(
   '/',
   accessTokenValidator,
-  groupIdValidator,
-  groupMemberValidator,
+  validateGroupMembership,
   getQuestionsValidator,
   wrapRequestHandler(getQuestionsByGroupIdController)
 );
@@ -96,11 +96,24 @@ questionsRouter.delete(
 );
 
 questionsRouter.post(
-  '/:question_id/votes',
+  '/:question_id/upvotes',
   accessTokenValidator,
   validateGroupQuestionAndMembership,
-  voteQuestionValidator,
-  wrapRequestHandler(voteQuestionController)
+  wrapRequestHandler(upvoteQuestionController)
+);
+
+questionsRouter.post(
+  '/:question_id/downvotes',
+  accessTokenValidator,
+  validateGroupQuestionAndMembership,
+  wrapRequestHandler(downvoteQuestionController)
+);
+
+questionsRouter.post(
+  '/:question_id/unvotes',
+  accessTokenValidator,
+  validateGroupQuestionAndMembership,
+  wrapRequestHandler(unvoteQuestionController)
 );
 
 questionsRouter.get(

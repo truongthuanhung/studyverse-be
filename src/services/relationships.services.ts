@@ -3,6 +3,8 @@ import databaseService from './database.services';
 import { USERS_MESSAGES } from '~/constants/messages';
 import { Follower } from '~/models/schemas/Follower.schema';
 import { Friend } from '~/models/schemas/Friend.schema';
+import { NotificationType } from '~/constants/enums';
+import notificationsService from './notifications.services';
 
 class RelationshipsService {
   private sortUserIds(id1: ObjectId, id2: ObjectId): [ObjectId, ObjectId] {
@@ -271,11 +273,12 @@ class RelationshipsService {
     const followedUserObjectId = new ObjectId(followed_user_id);
 
     const session = databaseService.client.startSession();
+    let isNewFollow = false;
+    let isMutualFollow = false;
 
     try {
       await session.withTransaction(async () => {
         // Kiểm tra và thêm follow trong một truy vấn sử dụng findOneAndUpdate
-        // với upsert: false để đảm bảo không tạo bản ghi nếu đã tồn tại
         const result = await databaseService.followers.findOneAndUpdate(
           {
             user_id: userObjectId,
@@ -295,8 +298,10 @@ class RelationshipsService {
           }
         );
 
-        // Nếu đây là bản ghi mới (không phải update), kiểm tra follow ngược lại
+        // Nếu đây là bản ghi mới
         if (result) {
+          isNewFollow = true;
+
           // Kiểm tra xem người kia có follow mình không
           const mutualFollow = await databaseService.followers.findOne(
             {
@@ -308,9 +313,10 @@ class RelationshipsService {
 
           // Nếu có follow lẫn nhau, thêm vào friends
           if (mutualFollow) {
+            isMutualFollow = true;
             const [smallerId, largerId] = this.sortUserIds(userObjectId, followedUserObjectId);
 
-            // Sử dụng updateOne với upsert: true để tránh truy vấn findOne riêng biệt
+            // Sử dụng updateOne với upsert: true
             await databaseService.friends.updateOne(
               {
                 user_id1: smallerId,
@@ -331,6 +337,17 @@ class RelationshipsService {
           }
         }
       });
+
+      if (isNewFollow) {
+        notificationsService.createNotification({
+          user_id: followed_user_id,
+          actor_id: user_id,
+          reference_id: followed_user_id,
+          type: NotificationType.Personal,
+          content: 'started following you',
+          target_url: `/${user_id}`
+        });
+      }
 
       return {
         message: USERS_MESSAGES.FOLLOW_SUCCESSFULLY

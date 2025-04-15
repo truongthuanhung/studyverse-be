@@ -7,19 +7,19 @@ import { LikeRequestBody } from '~/models/requests/Like.requests';
 
 export const likeController = async (req: Request<ParamsDictionary, any, LikeRequestBody>, res: Response) => {
   const { user_id } = req.decoded_authorization as TokenPayload;
-  const like_count = await likeService.like(user_id, req.body);
+  const result = await likeService.like(user_id, req.body);
   return res.status(HTTP_STATUS.CREATED).json({
     message: 'Like successfully',
-    like_count
+    result
   });
 };
 
 export const unlikeController = async (req: Request, res: Response) => {
   const { user_id } = req.decoded_authorization as TokenPayload;
-  const like_count = await likeService.unlike(user_id, req.params.target_id);
+  const result = await likeService.unlike(user_id, req.params.target_id);
   return res.json({
     message: 'Unlike successfully',
-    like_count
+    result
   });
 };
 

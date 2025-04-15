@@ -88,3 +88,25 @@ export enum InvitationStatus {
   Unread,
   Read
 }
+
+export enum SearchType {
+  Group,
+  General
+}
+
+export enum SearchTargetType {
+  Group,
+  User
+}
+
+export enum ReplyApprovedByType {
+  User,
+  Teacher
+}
+
+export enum InteractionType {
+  Like,
+  Comment,
+  Post,
+  Share
+}

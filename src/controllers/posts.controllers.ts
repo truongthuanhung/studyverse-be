@@ -29,7 +29,8 @@ export const getPostByIdController = async (req: Request, res: Response, next: N
 
 export const sharePostController = async (req: Request<ParamsDictionary, any, SharePostRequestBody>, res: Response) => {
   const { user_id } = req.decoded_authorization as TokenPayload;
-  const result = await postsService.sharePost(user_id, req.body);
+  const { post_id } = req.params;
+  const result = await postsService.sharePost({ user_id, parent_id: post_id, post: req.body });
   return res.status(HTTP_STATUS.CREATED).json({
     message: 'Share post successfully',
     result
@@ -81,7 +82,7 @@ export const getNewsFeedController = async (req: Request, res: Response) => {
   const limit = Number(req.query.limit) || 10;
   const page = Number(req.query.page) || 1;
 
-  const result = await postsService.getNewFeeds({ user_id, limit, page });
+  const result = await postsService.getNewsFeed({ user_id, limit, page });
   return res.json({
     message: 'Get news feed successfully',
     result

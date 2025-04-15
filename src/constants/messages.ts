@@ -127,3 +127,19 @@ export const NOTIFICATION_MESSAGES = {
   NOT_FOUND: 'Notification not found',
   INVALID_ID: 'Invalid mongo id'
 } as const;
+
+export const SEARCH_MESSAGES = {
+  SEARCH_SUCCESS: 'Search successfully',
+  RETRIVE_HISTORY_SUCCESS: 'Search history retrieved successfully',
+  DELETE_HISTORY_SUCCESS: 'Search history deleted successfully',
+  HISTORY_NOT_FOUND: 'Search history not found'
+} as const;
+
+export const USER_NOTIFICATIONS = {
+  UPVOTE_QUESTION: 'has upvoted your question',
+  DOWNVOTE_QUESTION: 'has downvoted your question',
+  UPVOTE_REPLY: 'has upvoted your reply',
+  DOWNVOTE_REPLY: 'has downvoted your reply',
+  REPLY_QUESTION: 'has replied your question',
+  REPLY_ON_REPLY: 'has replied your reply'
+};

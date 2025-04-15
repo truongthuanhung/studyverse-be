@@ -20,6 +20,10 @@ import Badge from '~/models/schemas/Badge.schema';
 import UserBadge from '~/models/schemas/UserBadge.schema';
 import { Friend } from '~/models/schemas/Friend.schema';
 import StudyGroupInvitation from '~/models/schemas/StudyGroupInvitation.schema';
+import Tag from '~/models/schemas/Tag.schema';
+import GroupTag from '~/models/schemas/GroupTag.schema';
+import SearchHistory from '~/models/schemas/SearchHistory.schema';
+import UserTagInteraction from '~/models/schemas/UserTagInteraction';
 
 config();
 const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@studyverse.otnmy.mongodb.net/?retryWrites=true&w=majority&appName=StudyVerse`;
@@ -127,6 +131,18 @@ class DatabaseService {
   }
   get study_group_invitations(): Collection<StudyGroupInvitation> {
     return this.db.collection('study_group_invitations');
+  }
+  get tags(): Collection<Tag> {
+    return this.db.collection('tags');
+  }
+  get group_tags(): Collection<GroupTag> {
+    return this.db.collection('group_tags');
+  }
+  get search_history(): Collection<SearchHistory> {
+    return this.db.collection('search_history');
+  }
+  get user_tag_interactions(): Collection<UserTagInteraction> {
+    return this.db.collection('user_tag_interactions');
   }
 }
 

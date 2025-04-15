@@ -11,6 +11,7 @@ import notificationsService from './notifications.services';
 import studyGroupsService from './studyGroups.services';
 import { POINTS } from '~/constants/points';
 import { QUESTION_MESSAGES } from '~/constants/messages';
+import tagsService from './tags.services';
 
 class QuestionsService {
   async checkQuestionExists(question_id: string) {
@@ -52,13 +53,19 @@ class QuestionsService {
     );
 
     if (role === StudyGroupRole.Admin) {
-      await studyGroupsService.addPointsToMember({
-        user_id: user_id.toString(),
-        group_id: group_id.toString(),
-        pointsToAdd: POINTS.QUESTION_APPROVED
+      void studyGroupsService
+        .addPointsToMember({
+          user_id: user_id.toString(),
+          group_id: group_id.toString(),
+          pointsToAdd: POINTS.QUESTION_APPROVED
+        })
+        .catch(console.error);
+
+      question.tags.forEach((tag_id) => {
+        void tagsService.increaseGroupTagCount(group_id, tag_id).catch(console.error);
       });
     } else {
-      await notificationsService.emitToAdminGroup({
+      notificationsService.emitToAdminGroup({
         group_id: group_id,
         event_name: 'new_pending_question',
         body: {
@@ -73,169 +80,8 @@ class QuestionsService {
         }
       });
     }
-
-    // Get question with additional fields using aggregation
-    const [result] = await databaseService.questions
-      .aggregate([
-        {
-          $match: {
-            _id: insertedId
-          }
-        },
-        {
-          $lookup: {
-            from: 'users',
-            localField: 'user_id',
-            foreignField: '_id',
-            pipeline: [
-              {
-                $project: {
-                  _id: 1,
-                  name: 1,
-                  username: 1,
-                  avatar: 1
-                }
-              }
-            ],
-            as: 'user_info'
-          }
-        },
-        { $unwind: { path: '$user_info', preserveNullAndEmptyArrays: true } },
-
-        // Count replies
-        {
-          $lookup: {
-            from: 'replies',
-            let: { questionId: '$_id' },
-            pipeline: [
-              {
-                $match: {
-                  $expr: { $eq: ['$question_id', '$$questionId'] }
-                }
-              },
-              {
-                $count: 'total'
-              }
-            ],
-            as: 'replies_count'
-          }
-        },
-        {
-          $addFields: {
-            replies_count: {
-              $ifNull: [{ $arrayElemAt: ['$replies_count.total', 0] }, 0]
-            }
-          }
-        },
-
-        // Get upvotes and downvotes count
-        {
-          $lookup: {
-            from: 'votes',
-            let: { questionId: '$_id' },
-            pipeline: [
-              {
-                $match: {
-                  $expr: { $eq: ['$target_id', '$$questionId'] }
-                }
-              },
-              {
-                $group: {
-                  _id: '$type',
-                  count: { $sum: 1 }
-                }
-              }
-            ],
-            as: 'votes'
-          }
-        },
-        {
-          $addFields: {
-            upvotes: {
-              $ifNull: [
-                {
-                  $arrayElemAt: [
-                    {
-                      $filter: {
-                        input: '$votes',
-                        as: 'vote',
-                        cond: { $eq: ['$$vote._id', VoteType.Upvote] }
-                      }
-                    },
-                    0
-                  ]
-                },
-                { count: 0 }
-              ]
-            },
-            downvotes: {
-              $ifNull: [
-                {
-                  $arrayElemAt: [
-                    {
-                      $filter: {
-                        input: '$votes',
-                        as: 'vote',
-                        cond: { $eq: ['$$vote._id', VoteType.Downvote] }
-                      }
-                    },
-                    0
-                  ]
-                },
-                { count: 0 }
-              ]
-            }
-          }
-        },
-
-        // Get current user's vote status
-        {
-          $lookup: {
-            from: 'votes',
-            let: { questionId: '$_id', userId: new ObjectId(user_id) },
-            pipeline: [
-              {
-                $match: {
-                  $expr: {
-                    $and: [{ $eq: ['$target_id', '$$questionId'] }, { $eq: ['$user_id', '$$userId'] }]
-                  }
-                }
-              },
-              {
-                $project: {
-                  _id: 0,
-                  type: 1
-                }
-              }
-            ],
-            as: 'user_vote'
-          }
-        },
-        {
-          $addFields: {
-            user_vote: {
-              $ifNull: [{ $arrayElemAt: ['$user_vote.type', 0] }, null]
-            }
-          }
-        },
-        {
-          $project: {
-            user_id: 0,
-            votes: 0,
-            'upvotes._id': 0,
-            'downvotes._id': 0
-          }
-        }
-      ])
-      .toArray();
-
-    return {
-      ...result,
-      upvotes: result.upvotes.count,
-      downvotes: result.downvotes.count,
-      user_vote: result.user_vote,
-      replies: result.replies_count
-    };
+    const result = await this.getQuestionById(insertedId.toString(), user_id);
+    return result;
   }
 
   async deleteQuestion(question_id: string) {
@@ -359,7 +205,7 @@ class QuestionsService {
   }
 
   async getQuestionById(question_id: string, user_id: string) {
-    const [result] = await databaseService.questions
+    const result = await databaseService.questions
       .aggregate([
         {
           $match: {
@@ -386,89 +232,44 @@ class QuestionsService {
         },
         { $unwind: { path: '$user_info', preserveNullAndEmptyArrays: true } },
 
-        // Count replies
+        // Lookup role và badges trong group
         {
           $lookup: {
-            from: 'replies',
-            let: { questionId: '$_id' },
+            from: 'study_group_members',
+            let: { userId: '$user_id', groupId: '$group_id' },
             pipeline: [
               {
                 $match: {
-                  $expr: { $eq: ['$question_id', '$$questionId'] }
+                  $expr: {
+                    $and: [{ $eq: ['$user_id', '$$userId'] }, { $eq: ['$group_id', '$$groupId'] }]
+                  }
                 }
               },
               {
-                $count: 'total'
+                $project: {
+                  _id: 0,
+                  role: 1,
+                  badges: 1
+                }
               }
             ],
-            as: 'replies_count'
+            as: 'member_info'
           }
         },
         {
           $addFields: {
-            replies_count: {
-              $ifNull: [{ $arrayElemAt: ['$replies_count.total', 0] }, 0]
-            }
+            'user_info.role': { $ifNull: [{ $arrayElemAt: ['$member_info.role', 0] }, null] },
+            'user_info.badges': { $ifNull: [{ $arrayElemAt: ['$member_info.badges', 0] }, []] }
           }
         },
 
-        // Get upvotes and downvotes count
+        // Lookup tags
         {
           $lookup: {
-            from: 'votes',
-            let: { questionId: '$_id' },
-            pipeline: [
-              {
-                $match: {
-                  $expr: { $eq: ['$target_id', '$$questionId'] }
-                }
-              },
-              {
-                $group: {
-                  _id: '$type',
-                  count: { $sum: 1 }
-                }
-              }
-            ],
-            as: 'votes'
-          }
-        },
-        {
-          $addFields: {
-            upvotes: {
-              $ifNull: [
-                {
-                  $arrayElemAt: [
-                    {
-                      $filter: {
-                        input: '$votes',
-                        as: 'vote',
-                        cond: { $eq: ['$$vote._id', VoteType.Upvote] }
-                      }
-                    },
-                    0
-                  ]
-                },
-                { count: 0 }
-              ]
-            },
-            downvotes: {
-              $ifNull: [
-                {
-                  $arrayElemAt: [
-                    {
-                      $filter: {
-                        input: '$votes',
-                        as: 'vote',
-                        cond: { $eq: ['$$vote._id', VoteType.Downvote] }
-                      }
-                    },
-                    0
-                  ]
-                },
-                { count: 0 }
-              ]
-            }
+            from: 'tags',
+            localField: 'tags',
+            foreignField: '_id',
+            as: 'tags'
           }
         },
 
@@ -497,9 +298,7 @@ class QuestionsService {
         },
         {
           $addFields: {
-            user_vote: {
-              $ifNull: [{ $arrayElemAt: ['$user_vote.type', 0] }, null]
-            }
+            user_vote: { $ifNull: [{ $arrayElemAt: ['$user_vote.type', 0] }, null] }
           }
         },
 
@@ -507,22 +306,17 @@ class QuestionsService {
           $project: {
             user_id: 0,
             votes: 0,
-            'upvotes._id': 0,
-            'downvotes._id': 0
+            member_info: 0
           }
         }
       ])
       .toArray();
 
-    return result
-      ? {
-          ...result,
-          upvotes: result.upvotes.count,
-          downvotes: result.downvotes.count,
-          user_vote: result.user_vote,
-          replies: result.replies_count
-        }
-      : null;
+    if (!result || result.length === 0) {
+      return null;
+    }
+
+    return result[0];
   }
 
   async getQuestionsByGroupId({
@@ -531,7 +325,8 @@ class QuestionsService {
     page,
     limit,
     sortBy,
-    status
+    status,
+    tag_id
   }: {
     group_id: string;
     user_id: string;
@@ -539,6 +334,7 @@ class QuestionsService {
     limit: number;
     sortBy: 'newest' | 'oldest';
     status: QuestionStatus;
+    tag_id?: string;
   }) {
     page = Math.max(1, page);
     limit = Math.max(1, Math.min(limit, 100));
@@ -546,265 +342,149 @@ class QuestionsService {
     const sortOrder = sortBy === 'newest' ? -1 : 1;
     const sortField = status === QuestionStatus.Pending ? 'created_at' : 'approved_at';
 
-    const [result, total] = await Promise.all([
-      databaseService.questions
-        .aggregate([
-          {
-            $match: {
-              group_id: new ObjectId(group_id),
-              status
-            }
-          },
-          {
-            $lookup: {
-              from: 'users',
-              localField: 'user_id',
-              foreignField: '_id',
-              pipeline: [
-                {
-                  $project: {
-                    _id: 1,
-                    name: 1,
-                    username: 1,
-                    avatar: 1
-                  }
-                }
-              ],
-              as: 'user_info'
-            }
-          },
-          { $unwind: { path: '$user_info', preserveNullAndEmptyArrays: true } },
+    const matchCondition: any = {
+      group_id: new ObjectId(group_id),
+      status
+    };
 
-          // Lookup user role in this group
-          {
-            $lookup: {
-              from: 'study_group_members',
-              let: { userId: '$user_id', groupId: new ObjectId(group_id) },
-              pipeline: [
-                {
-                  $match: {
-                    $expr: {
-                      $and: [{ $eq: ['$user_id', '$$userId'] }, { $eq: ['$group_id', '$$groupId'] }]
-                    }
-                  }
-                },
-                {
-                  $project: {
-                    _id: 0,
-                    role: 1
-                  }
-                }
-              ],
-              as: 'member_info'
-            }
-          },
-          {
-            $addFields: {
-              'user_info.role': {
-                $ifNull: [{ $arrayElemAt: ['$member_info.role', 0] }, null]
-              }
-            }
-          },
+    if (tag_id) {
+      matchCondition.tags = { $in: [new ObjectId(tag_id)] };
+    }
 
-          // Lookup user badges for this group
-          {
-            $lookup: {
-              from: 'user_badges',
-              let: { userId: '$user_id', groupId: new ObjectId(group_id) },
-              pipeline: [
-                {
-                  $match: {
-                    $expr: {
-                      $and: [{ $eq: ['$user_id', '$$userId'] }, { $eq: ['$group_id', '$$groupId'] }]
-                    }
-                  }
-                },
-                // Lookup badge details
-                {
-                  $lookup: {
-                    from: 'badges',
-                    localField: 'badge_id',
-                    foreignField: '_id',
-                    as: 'badge_details'
-                  }
-                },
-                { $unwind: { path: '$badge_details', preserveNullAndEmptyArrays: true } },
-                {
-                  $project: {
-                    _id: 1,
-                    badge_id: 1,
-                    badge_name: '$badge_details.name',
-                    badge_description: '$badge_details.description',
-                    badge_icon_url: '$badge_details.icon_url',
-                    badge_points_required: '$badge_details.points_required',
-                    created_at: 1
-                  }
-                }
-              ],
-              as: 'temp_user_badges'
-            }
-          },
-
-          // Add the badges to user_info
-          {
-            $addFields: {
-              'user_info.badges': '$temp_user_badges'
-            }
-          },
-
-          // Count replies
-          {
-            $lookup: {
-              from: 'replies',
-              let: { questionId: '$_id' },
-              pipeline: [
-                {
-                  $match: {
-                    $expr: { $eq: ['$question_id', '$$questionId'] }
-                  }
-                },
-                {
-                  $count: 'total'
-                }
-              ],
-              as: 'replies_count'
-            }
-          },
-          {
-            $addFields: {
-              replies_count: {
-                $ifNull: [{ $arrayElemAt: ['$replies_count.total', 0] }, 0]
-              }
-            }
-          },
-
-          // Get upvotes and downvotes count
-          {
-            $lookup: {
-              from: 'votes',
-              let: { questionId: '$_id' },
-              pipeline: [
-                {
-                  $match: {
-                    $expr: { $eq: ['$target_id', '$$questionId'] }
-                  }
-                },
-                {
-                  $group: {
-                    _id: '$type',
-                    count: { $sum: 1 }
-                  }
-                }
-              ],
-              as: 'votes'
-            }
-          },
-          {
-            $addFields: {
-              upvotes: {
-                $ifNull: [
-                  {
-                    $arrayElemAt: [
-                      {
-                        $filter: {
-                          input: '$votes',
-                          as: 'vote',
-                          cond: { $eq: ['$$vote._id', VoteType.Upvote] }
-                        }
-                      },
-                      0
-                    ]
-                  },
-                  { count: 0 }
-                ]
+    // Sử dụng facet để thực hiện phân trang và đếm trong một lần truy vấn
+    const [result] = await databaseService.questions
+      .aggregate([
+        {
+          $match: matchCondition
+        },
+        {
+          $facet: {
+            questions: [
+              {
+                $sort: { [sortField]: sortOrder }
               },
-              downvotes: {
-                $ifNull: [
-                  {
-                    $arrayElemAt: [
-                      {
-                        $filter: {
-                          input: '$votes',
-                          as: 'vote',
-                          cond: { $eq: ['$$vote._id', VoteType.Downvote] }
-                        }
-                      },
-                      0
-                    ]
-                  },
-                  { count: 0 }
-                ]
-              }
-            }
-          },
-
-          // Check current user's vote status
-          {
-            $lookup: {
-              from: 'votes',
-              let: { questionId: '$_id', userId: new ObjectId(user_id) },
-              pipeline: [
-                {
-                  $match: {
-                    $expr: {
-                      $and: [{ $eq: ['$target_id', '$$questionId'] }, { $eq: ['$user_id', '$$userId'] }]
+              {
+                $skip: skip
+              },
+              {
+                $limit: limit
+              },
+              // Lookup user info - chỉ lấy tối thiểu thông tin cần thiết
+              {
+                $lookup: {
+                  from: 'users',
+                  localField: 'user_id',
+                  foreignField: '_id',
+                  pipeline: [
+                    {
+                      $project: {
+                        _id: 1,
+                        name: 1,
+                        username: 1,
+                        avatar: 1
+                      }
                     }
-                  }
-                },
-                {
-                  $project: {
-                    _id: 0,
-                    type: 1
+                  ],
+                  as: 'user_info'
+                }
+              },
+              { $unwind: { path: '$user_info', preserveNullAndEmptyArrays: true } },
+
+              // Lookup user role và badges - tối ưu hóa query
+              {
+                $lookup: {
+                  from: 'study_group_members',
+                  let: { userId: '$user_id', groupId: new ObjectId(group_id) },
+                  pipeline: [
+                    {
+                      $match: {
+                        $expr: {
+                          $and: [{ $eq: ['$user_id', '$$userId'] }, { $eq: ['$group_id', '$$groupId'] }]
+                        }
+                      }
+                    },
+                    {
+                      $project: {
+                        _id: 0,
+                        role: 1,
+                        badges: 1
+                      }
+                    }
+                  ],
+                  as: 'member_info'
+                }
+              },
+              {
+                $addFields: {
+                  'user_info.role': {
+                    $ifNull: [{ $arrayElemAt: ['$member_info.role', 0] }, null]
+                  },
+                  'user_info.badges': {
+                    $ifNull: [{ $arrayElemAt: ['$member_info.badges', 0] }, []]
                   }
                 }
-              ],
-              as: 'user_vote'
-            }
-          },
-          {
-            $addFields: {
-              user_vote: {
-                $ifNull: [{ $arrayElemAt: ['$user_vote.type', 0] }, null]
+              },
+
+              // Lookup tag details
+              {
+                $lookup: {
+                  from: 'tags',
+                  localField: 'tags',
+                  foreignField: '_id',
+                  as: 'tags'
+                }
+              },
+
+              // Check current user's vote status
+              {
+                $lookup: {
+                  from: 'votes',
+                  let: { questionId: '$_id', userId: new ObjectId(user_id) },
+                  pipeline: [
+                    {
+                      $match: {
+                        $expr: {
+                          $and: [{ $eq: ['$target_id', '$$questionId'] }, { $eq: ['$user_id', '$$userId'] }]
+                        }
+                      }
+                    },
+                    {
+                      $project: {
+                        _id: 0,
+                        type: 1
+                      }
+                    }
+                  ],
+                  as: 'user_vote'
+                }
+              },
+              {
+                $addFields: {
+                  user_vote: {
+                    $ifNull: [{ $arrayElemAt: ['$user_vote.type', 0] }, null]
+                  }
+                }
+              },
+              {
+                $project: {
+                  user_id: 0,
+                  votes: 0,
+                  member_info: 0
+                }
               }
-            }
-          },
-
-          {
-            $project: {
-              user_id: 0,
-              votes: 0,
-              'upvotes._id': 0,
-              'downvotes._id': 0,
-              temp_user_badges: 0, // Remove the temporary field
-              member_info: 0 // Remove the temporary field
-            }
-          },
-          {
-            $sort: { [sortField]: sortOrder }
-          },
-          {
-            $skip: skip
-          },
-          {
-            $limit: limit
+            ],
+            total: [{ $count: 'count' }]
           }
-        ])
-        .toArray(),
-      databaseService.questions.countDocuments({
-        group_id: new ObjectId(group_id)
-      })
-    ]);
+        }
+      ])
+      .toArray();
 
+    const questions = result.questions || [];
+    const total = result.total.length > 0 ? result.total[0].count : 0;
     const total_pages = Math.ceil(total / limit);
 
     return {
-      questions: result.map((q) => ({
-        ...q,
-        upvotes: q.upvotes.count,
-        downvotes: q.downvotes.count,
-        user_vote: q.user_vote,
-        replies: q.replies_count
-      })),
+      questions,
       total,
       page,
       limit,

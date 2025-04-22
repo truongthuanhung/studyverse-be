@@ -5,7 +5,7 @@
 
 /uploads
 /uploads_temp
-/scripts
+/src/scripts
 
 # Logs
 logs

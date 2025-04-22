@@ -184,3 +184,14 @@ export const getGroupUserStatsController = async (req: Request, res: Response) =
     result
   });
 };
+
+export const getFeaturedStudyGroupsController = async (req: Request, res: Response) => {
+  const { user_id } = req.decoded_authorization as TokenPayload;
+  const { limit = '10' } = req.query;
+  const limitNumber = parseInt(limit as string, 10);
+  const result = await studyGroupsService.getFeaturedStudyGroups({ user_id, limit: limitNumber });
+  return res.json({
+    message: STUDY_GROUP_MESSAGES.FEATURED_GROUPS_RETRIEVED,
+    result
+  });
+};

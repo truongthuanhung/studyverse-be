@@ -190,6 +190,87 @@ class StudyGroupsService {
     };
   }
 
+  async getFeaturedStudyGroups({
+    user_id,
+    limit = 10
+  }: {
+    user_id: string;
+    limit?: number;
+  }) {
+    limit = Math.max(1, Math.min(limit, 10)); // Giới hạn tối đa 10 nhóm
+  
+    const matchStage: any = {
+      user_id: new ObjectId(user_id)
+    };
+  
+    const result = await databaseService.study_group_members
+      .aggregate([
+        { $match: matchStage },
+        {
+          $lookup: {
+            from: 'study_groups',
+            localField: 'group_id',
+            foreignField: '_id',
+            as: 'groupDetails'
+          }
+        },
+        { $unwind: '$groupDetails' },
+        {
+          $lookup: {
+            from: 'study_group_members',
+            localField: 'group_id',
+            foreignField: 'group_id',
+            as: 'members'
+          }
+        },
+        {
+          $project: {
+            _id: '$groupDetails._id',
+            name: '$groupDetails.name',
+            privacy: '$groupDetails.privacy',
+            description: '$groupDetails.description',
+            cover_photo: '$groupDetails.cover_photo',
+            role: '$role',
+            points: '$points',
+            badges_count: { $size: '$badges' },
+            joined_at: '$created_at',
+            member_count: { $size: '$members' },
+            // Tính điểm đánh giá ưu tiên
+            priority_score: {
+              $sum: [
+                // Admin có quyền cao hơn
+                { $cond: [{ $eq: ['$role', StudyGroupRole.Admin] }, 50, 0] },
+                // Nhóm đông thành viên
+                { $multiply: [{ $size: '$members' }, 0.1] },
+                // Điểm hoạt động trong nhóm
+                { $ifNull: ['$points', 0] },
+                // Số huy hiệu
+                { $multiply: [{ $size: '$badges' }, 5] },
+                // Nhóm mới tham gia (trong vòng 30 ngày)
+                {
+                  $cond: [
+                    {
+                      $gte: [
+                        '$created_at',
+                        { $subtract: [new Date(), 30 * 24 * 60 * 60 * 1000] }
+                      ]
+                    },
+                    20,
+                    0
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        { $sort: { priority_score: -1 } },
+        { $limit: limit }
+      ])
+      .toArray();
+  
+    return result;
+  }
+
   async getStudyGroupById(user_id: string, group_id: string) {
     const pipeline = [
       // Filter study_groups by id

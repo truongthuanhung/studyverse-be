@@ -7,6 +7,7 @@ import {
   declineJoinRequestController,
   demoteMemberController,
   editStudyGroupController,
+  getFeaturedStudyGroupsController,
   getGroupUserStatsController,
   getJoinRequestsController,
   getJoinRequestsCountController,
@@ -23,7 +24,7 @@ import {
   getTagsByUsageInGroupController,
   searchTagsByGroupController
 } from '~/controllers/tags.controllers';
-import { filterMiddleware } from '~/middlewares/common.middlewares';
+import { filterMiddleware, paginationValidator } from '~/middlewares/common.middlewares';
 import {
   adminValidator,
   createStudyGroupValidator,
@@ -41,6 +42,13 @@ import { wrapRequestHandler } from '~/utils/handlers';
 const studyGroupRouter = Router();
 
 studyGroupRouter.get('/', accessTokenValidator, getStudyGroupsValidator, wrapRequestHandler(getStudyGroupsController));
+
+studyGroupRouter.get(
+  '/featured-groups',
+  accessTokenValidator,
+  paginationValidator,
+  wrapRequestHandler(getFeaturedStudyGroupsController)
+);
 
 studyGroupRouter.get(
   '/:group_id/users/:user_id/stats',

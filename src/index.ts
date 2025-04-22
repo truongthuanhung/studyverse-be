@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import usersRouter from './routes/users.routes';
 import databaseService from './services/database.services';
 import cors from 'cors';
@@ -34,6 +34,7 @@ import searchRouter from './routes/search.routes';
 //import '~/scripts/childReplies.faker';
 //import '~/scripts/groupUsers.faker';
 //import '~/scripts/childComments.faker';
+//import '~/scripts/beautyFriendPosts.faker';
 config();
 
 const port = process.env.PORT || 3003;

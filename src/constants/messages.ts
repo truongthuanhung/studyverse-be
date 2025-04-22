@@ -101,7 +101,8 @@ export const STUDY_GROUP_MESSAGES = {
   MEMBER_DEMOTED: 'Member has been demoted successfully',
   MEMBER_REMOVED: 'Member has been removed successfully',
   MEMBERS_RETRIEVED: 'Members have been retrieved successfully',
-  MEMBER_STATS_RETRIEVED: 'Member stats have been retrieved successfully'
+  MEMBER_STATS_RETRIEVED: 'Member stats have been retrieved successfully',
+  FEATURED_GROUPS_RETRIEVED: 'Featured groups have been retrieved successfully'
 } as const;
 
 export const QUESTION_MESSAGES = {

@@ -634,11 +634,36 @@ class UsersService {
     return Boolean(isMutualFollow);
   }
 
-  async getUsers(current_user_id: string) {
-    // Lấy danh sách users
-    const users = await databaseService.users
+  async getFriends(current_user_id: string) {
+    const current_user_object_id = new ObjectId(current_user_id);
+
+    // 1. Find all friends of current user
+    const friends = await databaseService.friends
+      .find({
+        $or: [{ user_id1: current_user_object_id }, { user_id2: current_user_object_id }]
+      })
+      .toArray();
+
+    // If no friends, return empty array
+    if (friends.length === 0) {
+      return [];
+    }
+
+    // 2. Get list of friend IDs (excluding current user)
+    const friendIds = friends.map((friend) => {
+      // Return the ID that isn't the current user
+      if (friend.user_id1.toString() === current_user_id) {
+        return friend.user_id2;
+      }
+      return friend.user_id1;
+    });
+
+    // 3. Get user data for all friends
+    const friendUsers = await databaseService.users
       .find(
-        { _id: { $ne: new ObjectId(current_user_id) } },
+        {
+          _id: { $in: friendIds }
+        },
         {
           projection: {
             password: 0,
@@ -652,16 +677,16 @@ class UsersService {
       )
       .toArray();
 
-    // Lấy conversations của current user
+    // 4. Get Direct conversations with these friends
     const conversations = await databaseService.conversations
       .find({
-        participants: new ObjectId(current_user_id),
+        participants: current_user_object_id,
         type: ConversationType.Direct
       })
       .toArray();
 
-    // Map users với conversation_id tương ứng
-    const result = users.map((user) => {
+    // 5. Map users with conversation_id
+    const result = friendUsers.map((user) => {
       const conversation = conversations.find((conv) =>
         conv.participants.some((participantId) => participantId.toString() === user._id.toString())
       );

@@ -206,7 +206,7 @@ export const changePasswordController = async (
 
 export const getUsersController = async (req: Request, res: Response) => {
   const { user_id } = req.decoded_authorization as TokenPayload;
-  const result = await usersService.getUsers(user_id);
+  const result = await usersService.getFriends(user_id);
   return res.json({
     message: 'Get users list successfully',
     result

@@ -56,10 +56,12 @@ class UserSuggestionsService {
     if (userGroups.length === 0) {
       return {
         users: [],
-        total: 0,
-        page,
-        limit,
-        totalPages: 0
+        pagination: {
+          total: 0,
+          page,
+          limit,
+          totalPages: 0
+        }
       };
     }
 

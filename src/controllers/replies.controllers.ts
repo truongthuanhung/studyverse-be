@@ -81,7 +81,7 @@ export const voteReplyController = async (req: Request<ParamsDictionary, any, Vo
     type: req.body.type,
     group_id: study_group?._id?.toString() as string,
     target_owner_id,
-    target_url: `groups/${study_group?._id}/questions/${question?._id?.toString()}/replies/${reply?._id.toString()}`
+    target_url: `groups/${study_group?._id}/questions/${question?._id?.toString()}?replyId=${reply?._id.toString()}`
   });
 
   return res.json({
@@ -100,7 +100,7 @@ export const upvoteReplyController = async (req: Request<ParamsDictionary, any, 
     target_id: reply?._id.toString() as string,
     group_id: study_group?._id?.toString() as string,
     target_owner_id,
-    target_url: `groups/${study_group?._id}/questions/${question?._id?.toString()}/replies/${reply?._id.toString()}`
+    target_url: `groups/${study_group?._id}/questions/${question?._id?.toString()}?replyId=${reply?._id.toString()}`
   });
 
   return res.json({
@@ -119,7 +119,7 @@ export const downvoteReplyController = async (req: Request<ParamsDictionary, any
     target_id: reply?._id.toString() as string,
     group_id: study_group?._id?.toString() as string,
     target_owner_id,
-    target_url: `groups/${study_group?._id}/questions/${question?._id?.toString()}/replies/${reply?._id.toString()}`
+    target_url: `groups/${study_group?._id}/questions/${question?._id?.toString()}?replyId=${reply?._id.toString()}`
   });
 
   return res.json({
@@ -138,7 +138,7 @@ export const unvoteReplyController = async (req: Request<ParamsDictionary, any, 
     target_id: reply?._id.toString() as string,
     group_id: study_group?._id?.toString() as string,
     target_owner_id,
-    target_url: `groups/${study_group?._id}/questions/${question?._id?.toString()}/replies/${reply?._id.toString()}`
+    target_url: `groups/${study_group?._id}/questions/${question?._id?.toString()}?replyId=${reply?._id.toString()}`
   });
 
   return res.json({

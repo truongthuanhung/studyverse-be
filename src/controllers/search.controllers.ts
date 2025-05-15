@@ -7,20 +7,15 @@ import searchService from '~/services/search.services';
 
 export const searchController = async (req: Request<ParamsDictionary, any, any, SearchQuery>, res: Response) => {
   const { user_id } = req.decoded_authorization as TokenPayload;
-  const { q = '', page = '1', limit = '10' } = req.query;
+  const { q = '', page = '1', limit = '10', type } = req.query;
   const pageNumber = parseInt(page as string, 10);
   const limitNumber = parseInt(limit as string, 10);
-
-  const result = await searchService.generalSearch({
-    q,
-    user_id,
-    page: pageNumber,
-    limit: limitNumber
-  });
-  return res.json({
-    message: SEARCH_MESSAGES.SEARCH_SUCCESS,
-    result
-  });
+  if (type === 'group' || type === 'post' || type === 'user') {
+    const result = await searchService.search({ q, user_id, type, page: pageNumber, limit: limitNumber });
+    return res.json({ message: SEARCH_MESSAGES.SEARCH_SUCCESS, result });
+  }
+  const result = await searchService.generalSearch({ q, user_id });
+  return res.json({ message: SEARCH_MESSAGES.SEARCH_SUCCESS, result });
 };
 
 export const groupSearchController = async (req: Request<ParamsDictionary, any, any, SearchQuery>, res: Response) => {

@@ -10,6 +10,41 @@ import studyGroupsService from './studyGroups.services';
 import { POINTS } from '~/constants/points';
 
 class RepliesService {
+  private async deleteChildReplies(question_id: ObjectId, parent_id: ObjectId) {
+    // Tìm và xóa tất cả child replies
+    const deleteResult = await databaseService.replies.deleteMany({
+      question_id,
+      parent_id
+    });
+
+    // Tính toán số lượng replies bị xóa (1 cho reply cha + số lượng con)
+    const totalDeletedReplies = deleteResult.deletedCount + 1; // +1 for the parent reply
+
+    // Cập nhật reply_count trong question
+    const updatedQuestion = await databaseService.questions.findOneAndUpdate(
+      { _id: question_id },
+      {
+        $inc: { reply_count: -totalDeletedReplies }
+      },
+      {
+        returnDocument: 'after',
+        projection: { reply_count: 1, upvotes: 1, downvotes: 1 }
+      }
+    );
+
+    if (!updatedQuestion) {
+      throw new ErrorWithStatus({
+        message: 'Question not found',
+        status: HTTP_STATUS.NOT_FOUND
+      });
+    }
+
+    return {
+      question: updatedQuestion,
+      deletedCount: deleteResult.deletedCount
+    };
+  }
+
   async checkReplyExists(reply_id: string) {
     const reply = await databaseService.replies.findOne({
       _id: new ObjectId(reply_id)
@@ -472,8 +507,12 @@ class RepliesService {
       });
     }
 
+    const { question, deletedCount } = await this.deleteChildReplies(result.question_id, result._id);
+
     return {
-      deleted_reply: result
+      deleted_reply: result,
+      question_info: question,
+      child_replies_deleted: deletedCount
     };
   }
 

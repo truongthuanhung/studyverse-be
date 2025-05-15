@@ -352,9 +352,9 @@ export const createQuestionValidator = validate(
         isLength: {
           options: {
             min: 1,
-            max: 1000
+            max: 100
           },
-          errorMessage: 'Title must be from 1 to 1000 characters long'
+          errorMessage: 'Title must be from 1 to 100 characters long'
         },
         trim: true
       },

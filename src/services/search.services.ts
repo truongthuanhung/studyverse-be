@@ -75,8 +75,9 @@ class SearchService {
     return result;
   }
 
-  async generalSearch({
+  async search({
     q,
+    type,
     page = 1,
     limit = 10,
     user_id
@@ -85,11 +86,123 @@ class SearchService {
     page?: number;
     limit?: number;
     user_id: string;
+    type?: 'user' | 'post' | 'group';
   }) {
     const skip = (page - 1) * limit;
     const userObjectId = new ObjectId(user_id);
 
-    // Define user projection to exclude sensitive fields
+    if (type === 'user') {
+      const userProjection = { password: 0, email_verify_token: 0, forgot_password_token: 0, verify: 0, updated_at: 0 };
+      const usersAggregation = await databaseService.users
+        .aggregate([
+          { $match: { $text: { $search: q } } },
+          { $sort: { score: { $meta: 'textScore' } } },
+          {
+            $facet: {
+              users: [{ $skip: skip }, { $limit: limit }, { $project: userProjection }],
+              usersTotal: [{ $count: 'count' }]
+            }
+          }
+        ])
+        .toArray();
+
+      const users = usersAggregation[0].users;
+      const total = usersAggregation[0].usersTotal[0]?.count || 0;
+
+      return {
+        users,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit)
+        }
+      };
+    } else if (type === 'group') {
+      const groupsAggregation = await databaseService.study_groups
+        .aggregate([
+          { $match: { $text: { $search: q } } },
+          { $sort: { score: { $meta: 'textScore' } } },
+          {
+            $facet: {
+              groups: [{ $skip: skip }, { $limit: limit }],
+              groupsTotal: [{ $count: 'count' }]
+            }
+          }
+        ])
+        .toArray();
+
+      const groups = groupsAggregation[0].groups;
+      const groupsTotal = groupsAggregation[0].groupsTotal[0]?.count || 0;
+
+      return {
+        groups,
+        pagination: {
+          total: groupsTotal,
+          page,
+          limit,
+          totalPages: Math.ceil(groupsTotal / limit)
+        }
+      };
+    } else if (type === 'post') {
+      const [friendships, followings] = await Promise.all([
+        databaseService.friends.find({ $or: [{ user_id1: userObjectId }, { user_id2: userObjectId }] }).toArray(),
+        databaseService.followers.find({ user_id: userObjectId }).toArray()
+      ]);
+
+      const friendIds = friendships.map((friendship) => {
+        return friendship.user_id1.equals(userObjectId) ? friendship.user_id2 : friendship.user_id1;
+      });
+
+      // Extract followed user IDs
+      const followedUserIds = followings.map((follow) => follow.followed_user_id);
+
+      const postPrivacyFilter = {
+        $or: [
+          { privacy: PostPrivacy.Public }, // Public posts
+          { user_id: userObjectId }, // User's own posts regardless of privacy
+          { privacy: PostPrivacy.Friends, user_id: { $in: friendIds } }, // Friends' posts with Friends privacy
+          { privacy: PostPrivacy.Follower, user_id: { $in: followedUserIds } } // Followed users' posts with Follower privacy
+        ]
+      };
+
+      const postAggregation = await databaseService.posts
+        .aggregate([
+          {
+            $match: {
+              $and: [{ $text: { $search: q } }, postPrivacyFilter]
+            }
+          },
+          { $sort: { score: { $meta: 'textScore' } } },
+          {
+            $facet: {
+              posts: [{ $skip: skip }, { $limit: limit }],
+              postsTotal: [{ $count: 'count' }]
+            }
+          }
+        ])
+        .toArray();
+
+      const posts = postAggregation[0].posts;
+      const postsTotal = postAggregation[0].postsTotal[0]?.count || 0;
+
+      return {
+        posts,
+        pagination: {
+          total: postsTotal,
+          page,
+          limit,
+          totalPages: Math.ceil(postsTotal / limit)
+        }
+      };
+    }
+    return null;
+  }
+
+  async generalSearch({ q, user_id }: { q: string; user_id: string }) {
+    const previewLimit = 5; // Giới hạn kết quả preview cho mỗi loại
+    const userObjectId = new ObjectId(user_id);
+
     const userProjection = {
       password: 0,
       email_verify_token: 0,
@@ -98,16 +211,13 @@ class SearchService {
       updated_at: 0
     };
 
-    // Get user's friends and followed users
     const [friendships, followings] = await Promise.all([
-      // Find all friendships where the user is either user_id1 or user_id2
       databaseService.friends
         .find({
           $or: [{ user_id1: userObjectId }, { user_id2: userObjectId }]
         })
         .toArray(),
 
-      // Find all users that the current user follows
       databaseService.followers
         .find({
           user_id: userObjectId
@@ -115,102 +225,66 @@ class SearchService {
         .toArray()
     ]);
 
-    // Extract friend IDs
     const friendIds = friendships.map((friendship) => {
       return friendship.user_id1.equals(userObjectId) ? friendship.user_id2 : friendship.user_id1;
     });
 
-    // Extract followed user IDs
     const followedUserIds = followings.map((follow) => follow.followed_user_id);
 
-    // Construct post privacy filter
     const postPrivacyFilter = {
       $or: [
-        { privacy: PostPrivacy.Public }, // Public posts
+        { privacy: PostPrivacy.Public },
         {
-          user_id: userObjectId // User's own posts regardless of privacy
+          user_id: userObjectId
         },
         {
           privacy: PostPrivacy.Friends,
-          user_id: { $in: friendIds } // Friends' posts with Friends privacy
+          user_id: { $in: friendIds }
         },
         {
           privacy: PostPrivacy.Follower,
-          user_id: { $in: followedUserIds } // Followed users' posts with Follower privacy
+          user_id: { $in: followedUserIds }
         }
       ]
     };
 
-    // Execute queries in parallel for all three collections
-    const [users, groups, posts, usersTotal, groupsTotal, postsTotal] = await Promise.all([
-      // Search users using text index with projection
+    const [users, groups, posts] = await Promise.all([
       databaseService.users
         .find({
           $text: { $search: q }
         })
         .project(userProjection)
         .sort({ score: { $meta: 'textScore' } })
-        .skip(skip)
-        .limit(limit)
+        .limit(previewLimit)
         .toArray(),
 
-      // Search study groups using text index
+      // Search study groups preview using text index
       databaseService.study_groups
         .find({
           $text: { $search: q }
         })
         .sort({ score: { $meta: 'textScore' } })
-        .skip(skip)
-        .limit(limit)
+        .limit(previewLimit)
         .toArray(),
 
-      // Search posts with privacy filter
+      // Search posts preview with privacy filter
       databaseService.posts
         .find({
           $and: [{ $text: { $search: q } }, postPrivacyFilter]
         })
         .sort({ score: { $meta: 'textScore' } })
-        .skip(skip)
-        .limit(limit)
-        .toArray(),
-
-      // Count total documents for each collection
-      databaseService.users.countDocuments({
-        $text: { $search: q }
-      }),
-
-      databaseService.study_groups.countDocuments({
-        $text: { $search: q }
-      }),
-
-      // Count posts respecting privacy
-      databaseService.posts.countDocuments({
-        $and: [{ $text: { $search: q } }, postPrivacyFilter]
-      })
+        .limit(previewLimit)
+        .toArray()
     ]);
 
-    // Record search history if it's the first page
-    if (page === 1) {
-      this.addGeneralSearchHistory(user_id, q).catch((error) => {
-        console.error('Error saving general search history:', error);
-      });
-    }
-
-    const totalResults = usersTotal + groupsTotal + postsTotal;
+    this.addGeneralSearchHistory(user_id, q).catch((error) => {
+      console.error('Error saving general search history:', error);
+    });
 
     return {
       users,
       groups,
-      posts,
-      pagination: {
-        total: totalResults,
-        usersTotal,
-        groupsTotal,
-        postsTotal,
-        page,
-        limit,
-        totalPages: Math.ceil(totalResults / limit)
-      }
+      posts
     };
   }
 

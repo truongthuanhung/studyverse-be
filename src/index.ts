@@ -35,6 +35,8 @@ import searchRouter from './routes/search.routes';
 //import '~/scripts/groupUsers.faker';
 //import '~/scripts/childComments.faker';
 //import '~/scripts/beautyFriendPosts.faker';
+//import '~/scripts/c';
+//import '~/scripts/b';
 config();
 
 const port = process.env.PORT || 3003;

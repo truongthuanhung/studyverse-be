@@ -896,12 +896,14 @@ class PostsService {
     const objectUserId = new ObjectId(user_id);
 
     // Tỷ lệ phân phối
-    const FOLLOWED_POST_RATIO = 0.7; // 50% từ followed users
-    const TAG_POST_RATIO = 0.2; // 30% từ top tags
-    const TRENDING_POST_RATIO = 0.1; // 20% từ trending
+    const FOLLOWED_POST_RATIO = 0.6; // 60% từ followed users
+    const TAG_POST_RATIO = 0.15; // 15% từ top tags
+    const TRENDING_POST_RATIO = 0.1; // 10% từ trending
+    const RANDOM_POST_RATIO = 0.15; // 15% từ random public posts
     const followedLimit = Math.round(limit * FOLLOWED_POST_RATIO);
     const tagLimit = Math.round(limit * TAG_POST_RATIO);
-    const trendingLimit = limit - followedLimit - tagLimit;
+    const trendingLimit = Math.round(limit * TRENDING_POST_RATIO);
+    const randomLimit = limit - followedLimit - tagLimit - trendingLimit;
 
     // Lấy dữ liệu song song
     const [followDocs, topTagDocs] = await Promise.all([
@@ -964,22 +966,38 @@ class PostsService {
       ...this.buildPostLookups(objectUserId)
     ];
 
+    // Pipeline cho random public posts
+    const randomPipeline = [
+      {
+        $match: {
+          privacy: 'public',
+          user_id: { $nin: followedUserIds } // Tránh trùng với followed posts
+        }
+      },
+      { $sample: { size: randomLimit } }, // Lấy ngẫu nhiên bài viết
+      ...this.buildPostLookups(objectUserId)
+    ];
+
     // Thực thi song song và đếm tổng
-    const [followedPosts, tagPosts, trendingPosts, totalCount] = await Promise.all([
+    const [followedPosts, tagPosts, trendingPosts, randomPosts, totalCount] = await Promise.all([
       databaseService.posts.aggregate(followedPipeline).toArray(),
       databaseService.posts.aggregate(tagPipeline).toArray(),
       databaseService.posts.aggregate(trendingPipeline).toArray(),
+      databaseService.posts.aggregate(randomPipeline).toArray(),
       databaseService.posts.countDocuments({
         $or: [
           { user_id: { $in: followedUserIds } },
           { $and: [{ tags: { $in: topTagIds } }, { user_id: { $nin: followedUserIds } }] },
-          { created_at: { $gte: trendingThreshold } }
+          { created_at: { $gte: trendingThreshold } },
+          { privacy: PostPrivacy.Public }
         ]
       })
     ]);
 
     // Kết hợp kết quả
-    const posts = [...followedPosts, ...tagPosts, ...trendingPosts].sort((a, b) => b.created_at - a.created_at); // Sắp xếp lại theo thời gian
+    const posts = [...followedPosts, ...tagPosts, ...trendingPosts, ...randomPosts].sort(
+      (a, b) => b.created_at - a.created_at
+    ); // Sắp xếp lại theo thời gian
 
     const total_pages = Math.ceil(totalCount / limit);
 
